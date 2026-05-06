@@ -30,5 +30,14 @@ CREATE TABLE IF NOT EXISTS prediction_history (
     results_json LONGTEXT
 );
 
+CREATE TABLE IF NOT EXISTS lstm_weights (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    history_id INT NOT NULL,
+    kernel_sample LONGTEXT,
+    recurrent_sample LONGTEXT,
+    bias_sample LONGTEXT,
+    FOREIGN KEY (history_id) REFERENCES prediction_history(id) ON DELETE CASCADE
+);
+
 -- Indexes for fast ordering
 CREATE INDEX idx_year_week ON ticket_sales(year, week);

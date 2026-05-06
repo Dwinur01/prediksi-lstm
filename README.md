@@ -88,5 +88,4 @@ prediksi-lstm/
 
 ---
 
-**Dikembangkan oleh Antigravity AI untuk PT. Maskapai Udara Nusantara.**  
 *Sistem ini dirancang untuk membantu pengambilan keputusan strategis berbasis data.*

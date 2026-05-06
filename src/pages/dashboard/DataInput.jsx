@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Papa from 'papaparse';
 import { Upload, Plus, Trash2, Edit2, AlertTriangle, FileSpreadsheet, Download, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { motion } from 'framer-motion';
 import api from '../../services/api';
 import { getDummyTickets } from '../../services/dummy';
 
@@ -17,17 +18,17 @@ const DataInput = () => {
   }, []);
 
   const fetchData = async () => {
-    setLoading(true);
     try {
+      setLoading(true);
       const response = await api.get('/data/tickets.php');
-      if (response.data.status === 'success' && response.data.data.length > 0) {
+      if (response.data.status === 'success') {
         setData(response.data.data);
       } else {
-        throw new Error('No data');
+        throw new Error('Network error');
       }
     } catch (error) {
-      console.warn('API error, using dummy data');
-      toast('Database terputus, menampilkan data simulasi', { icon: '⚠️' });
+      console.warn('API Error, using dummy data:', error);
+      toast('Menggunakan data simulasi (Database terputus)', { icon: '⚠️' });
       setData(getDummyTickets());
     } finally {
       setLoading(false);
@@ -144,14 +145,53 @@ const DataInput = () => {
     }
   };
 
+  const handleExportCSV = () => {
+    if (data.length === 0) return toast.error('Tidak ada data untuk diekspor.');
+    
+    // Transform data for export
+    const exportData = data.map(item => ({
+      'ID': item.id,
+      'Minggu': item.week,
+      'Tahun': item.year,
+      'Jumlah': item.tickets_sold
+    }));
+
+    const csv = Papa.unparse(exportData);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `database_penjualan_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Database berhasil diekspor ke CSV');
+  };
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0 }
+  };
+
   return (
-    <div className="space-y-6">
-      <div>
+    <motion.div 
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="space-y-6"
+    >
+      <motion.div variants={itemVariants}>
         <h1 className="text-2xl font-bold text-white mb-2">Manajemen Data Penjualan</h1>
         <p className="text-gray-400">Input manual atau impor data penjualan mingguan dari CSV.</p>
-      </div>
+      </motion.div>
 
-      <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-4">
+      <motion.div variants={itemVariants} className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-4 shadow-lg shadow-blue-500/5">
         <AlertTriangle className="text-blue-400 mt-1 flex-shrink-0" size={24} />
         <div>
           <h4 className="text-blue-400 font-medium">Panduan Import Data CSV</h4>
@@ -160,25 +200,25 @@ const DataInput = () => {
             <br/>Kolom baris pertama (header) <strong>wajib</strong> bernama: <code>ID, Minggu, Tahun, Jumlah</code>.
             <br/>Untuk mendapatkan hasil prediksi LSTM yang akurat, <strong>pastikan tidak ada urutan minggu yang terlewat</strong> dalam rentang data Anda (data harus berurutan).
           </p>
-          <a href="/template_data.csv" download className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 rounded-lg text-xs font-medium transition-colors border border-blue-500/30">
+          <motion.a whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} href="/template_data.csv" download className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 rounded-lg text-xs font-medium transition-colors border border-blue-500/30">
             <Download size={14} /> Download File Contoh CSV
-          </a>
+          </motion.a>
         </div>
-      </div>
+      </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Form Input Manual */}
         <div className="lg:col-span-1 space-y-6">
-          <div className="glass-panel p-6">
+          <motion.div variants={itemVariants} className="glass-panel p-6 shadow-xl">
             <h3 className="text-lg font-semibold text-white mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {isEditing ? <Edit2 size={20} className="text-accent" /> : <Plus size={20} className="text-primary" />}
                 {isEditing ? 'Edit Data' : 'Input Manual'}
               </div>
               {isEditing && (
-                <button onClick={cancelEdit} className="text-gray-400 hover:text-white">
+                <motion.button whileHover={{ rotate: 90 }} onClick={cancelEdit} className="text-gray-400 hover:text-white">
                   <X size={18} />
-                </button>
+                </motion.button>
               )}
             </h3>
             <form onSubmit={handleManualSubmit} className="space-y-4">
@@ -200,31 +240,42 @@ const DataInput = () => {
                 <label className="block text-sm text-gray-400 mb-1">Jumlah Tiket Terjual</label>
                 <input required type="number" min="0" className="input-field" placeholder="0" value={formData.tickets_sold} onChange={e => setFormData({...formData, tickets_sold: e.target.value})} />
               </div>
-              <button type="submit" className={`btn-primary w-full ${isEditing ? 'bg-accent hover:bg-accent/90 shadow-accent/25' : ''}`}>
+              <motion.button 
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                type="submit" 
+                className={`btn-primary w-full ${isEditing ? 'bg-accent hover:bg-accent/90 shadow-accent/25' : ''}`}
+              >
                 {isEditing ? 'Perbarui Data' : 'Simpan Data'}
-              </button>
+              </motion.button>
             </form>
-          </div>
+          </motion.div>
 
-          <div className="glass-panel p-6">
+          <motion.div variants={itemVariants} className="glass-panel p-6 shadow-xl">
             <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <FileSpreadsheet size={20} className="text-accent" /> Import CSV
             </h3>
-            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-700 border-dashed rounded-lg cursor-pointer bg-gray-800/50 hover:bg-gray-800 transition-colors">
+            <motion.label 
+              whileHover={{ scale: 1.02, backgroundColor: 'rgba(31, 41, 55, 0.8)' }}
+              whileTap={{ scale: 0.98 }}
+              className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-700 border-dashed rounded-lg cursor-pointer bg-gray-800/50 hover:border-primary transition-all duration-300"
+            >
               <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                <Upload size={28} className="text-gray-400 mb-2" />
+                <Upload size={28} className="text-gray-400 mb-2 group-hover:text-primary transition-colors" />
                 <p className="text-sm text-gray-400"><span className="font-semibold text-primary">Klik untuk upload</span></p>
               </div>
               <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} disabled={loading} />
-            </label>
+            </motion.label>
             {loading && <p className="text-sm text-accent mt-2 text-center animate-pulse">Memproses file...</p>}
-          </div>
+          </motion.div>
         </div>
 
         {/* Tabel Data */}
-        <div className="lg:col-span-2 glass-panel p-6">
+        <motion.div variants={itemVariants} className="lg:col-span-2 glass-panel p-6 shadow-xl flex flex-col h-full">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
-            <h3 className="text-lg font-semibold text-white">Database Penjualan</h3>
+            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+              <Search size={20} className="text-primary"/> Database Penjualan
+            </h3>
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
               <div className="relative w-full sm:w-56">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -238,15 +289,20 @@ const DataInput = () => {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              <button onClick={handleDeleteAll} className="text-xs flex items-center justify-center gap-1 text-red-400 hover:text-red-300 transition-colors bg-red-500/10 px-3 py-1.5 rounded-lg border border-red-500/20 w-full sm:w-auto whitespace-nowrap">
-                <Trash2 size={14} /> Hapus Semua
-              </button>
+              <div className="flex gap-2 w-full sm:w-auto">
+                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleExportCSV} className="text-xs flex items-center justify-center gap-1 text-accent hover:text-accent/80 transition-colors bg-accent/10 px-3 py-1.5 rounded-lg border border-accent/20 w-full sm:w-auto whitespace-nowrap">
+                  <FileSpreadsheet size={14} /> Export CSV
+                </motion.button>
+                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleDeleteAll} className="text-xs flex items-center justify-center gap-1 text-red-400 hover:text-red-300 transition-colors bg-red-500/10 px-3 py-1.5 rounded-lg border border-red-500/20 w-full sm:w-auto whitespace-nowrap">
+                  <Trash2 size={14} /> Hapus Semua
+                </motion.button>
+              </div>
             </div>
           </div>
           
-          <div className="overflow-x-auto rounded-lg border border-gray-700/50">
+          <div className="flex-1 overflow-x-auto rounded-lg border border-gray-700/50 custom-scrollbar">
             <table className="w-full text-sm text-left text-gray-400">
-              <thead className="text-xs text-gray-300 uppercase bg-gray-800/80">
+              <thead className="text-xs text-gray-300 uppercase bg-gray-800/80 sticky top-0 z-10 backdrop-blur-md">
                 <tr>
                   <th className="px-4 py-3">No</th>
                   <th className="px-4 py-3">ID</th>
@@ -257,7 +313,7 @@ const DataInput = () => {
                   <th className="px-4 py-3 text-center">Aksi</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-gray-800/50">
                 {data.filter(item => 
                   item.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
                   item.week.toString().includes(searchTerm) ||
@@ -269,7 +325,14 @@ const DataInput = () => {
                   item.year.toString().includes(searchTerm) ||
                   item.tickets_sold.toString().includes(searchTerm)
                 ).map((item, index) => (
-                  <tr key={item.id} className="border-b border-gray-700/50 hover:bg-gray-800/30">
+                  <motion.tr 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    whileHover={{ backgroundColor: 'rgba(55, 65, 81, 0.4)', scale: 1.01 }}
+                    key={item.id} 
+                    className="border-b border-gray-700/50 hover:bg-gray-800/30 origin-left"
+                  >
                     <td className="px-4 py-3">{index + 1}</td>
                     <td className="px-4 py-3 font-medium text-gray-300">{item.id}</td>
                     <td className="px-4 py-3">{item.week}</td>
@@ -285,14 +348,14 @@ const DataInput = () => {
                       }) : '-'}
                     </td>
                     <td className="px-4 py-3 text-center space-x-2">
-                      <button onClick={() => handleEdit(item)} className="text-accent hover:text-accent/80 p-1">
+                      <motion.button whileHover={{ scale: 1.2 }} whileTap={{ scale: 0.9 }} onClick={() => handleEdit(item)} className="text-accent hover:text-accent/80 p-1">
                         <Edit2 size={16} />
-                      </button>
-                      <button onClick={() => handleDelete(item.id)} className="text-red-400 hover:text-red-300 p-1">
+                      </motion.button>
+                      <motion.button whileHover={{ scale: 1.2, color: '#ef4444' }} whileTap={{ scale: 0.9 }} onClick={() => handleDelete(item.id)} className="text-red-400 hover:text-red-300 p-1">
                         <Trash2 size={16} />
-                      </button>
+                      </motion.button>
                     </td>
-                  </tr>
+                  </motion.tr>
                 )) : (
                   <tr>
                     <td colSpan="7" className="px-4 py-8 text-center text-gray-500">
@@ -303,9 +366,9 @@ const DataInput = () => {
               </tbody>
             </table>
           </div>
-        </div>
+        </motion.div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

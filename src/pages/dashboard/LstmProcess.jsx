@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Play, Download, Printer, CheckCircle, AlertCircle, ChevronDown, ChevronUp, BrainCircuit, Calendar, TrendingUp, Eye } from 'lucide-react';
+import { Settings, Play, Download, Printer, CheckCircle, AlertCircle, ChevronDown, ChevronUp, BrainCircuit, Calendar, TrendingUp, Eye, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
@@ -11,7 +11,11 @@ import {
 } from 'recharts';
 import api from '../../services/api';
 import { getDummyTickets, getDummyHistory } from '../../services/dummy';
-import { normalizeData, denormalizeData, createSequences, buildModel, trainModel, predict, calculateMetrics, getManualLSTMCalculation } from '../../services/lstm';
+import { 
+  prepareMultivariateData, createSequences, buildModel, trainModel, 
+  predict, calculateMetrics, getManualLSTMCalculation, denormalizeData,
+  auditDataQuality, multiStepForecast 
+} from '../../services/lstm';
 
 // Accordion Component Helper
 const AccordionItem = ({ title, isOpen, onToggle, children, icon: Icon }) => (
@@ -48,8 +52,15 @@ const LstmProcess = () => {
   const [history, setHistory] = useState([]);
   const [status, setStatus] = useState('idle'); // idle, training, success
   const [progress, setProgress] = useState({ epoch: 0, loss: 0, logs: [] });
-  const [results, setResults] = useState({ dates: [], actuals: [], predictions: [], metrics: {}, normalized: [], manualCalculation: null });
-  const [params, setParams] = useState({ epochs: 10, learningRate: 0.01, windowSize: 4 });
+  const [results, setResults] = useState({ 
+    dates: [], actuals: [], predictions: [], metrics: {}, 
+    normalized: [], manualCalculation: null, audit: null, forecast: [] 
+  });
+  const [params, setParams] = useState({ 
+    epochs: 10, learningRate: 0.01, windowSize: 4, emaPeriod: 5, 
+    forecastSteps: 4, salesTarget: 1000 
+  });
+  const [pinnedResult, setPinnedResult] = useState(null);
   const [showConfig, setShowConfig] = useState(false);
   const [openAccordion, setOpenAccordion] = useState('');
 
@@ -61,10 +72,10 @@ const LstmProcess = () => {
   const fetchData = async () => {
     try {
       const response = await api.get('/data/tickets.php');
-      if (response.data.status === 'success' && response.data.data.length > 0) {
+      if (response.data.status === 'success') {
         setData(response.data.data);
       } else {
-        throw new Error('No data');
+        throw new Error('Network error');
       }
     } catch (error) {
       console.warn('Using dummy data for prediction input');
@@ -75,10 +86,10 @@ const LstmProcess = () => {
   const fetchHistory = async () => {
     try {
       const response = await api.get('/data/predictions.php');
-      if (response.data.status === 'success' && response.data.data.length > 0) {
+      if (response.data.status === 'success') {
         setHistory(response.data.data);
       } else {
-        throw new Error('No history');
+        throw new Error('Network error');
       }
     } catch (error) {
       console.warn('Using dummy history');
@@ -101,13 +112,16 @@ const LstmProcess = () => {
       const rawValues = data.map(d => parseInt(d.tickets_sold));
       const dates = data.map(d => `W${d.week} ${d.year}`);
 
-      // 1. Normalize Data
-      const { normalized, min, max } = normalizeData(rawValues);
+      // 1. Audit Data Quality (Feature 3)
+      const audit = auditDataQuality(data);
       
-      // 2. Create Sequences
-      const { X, y } = createSequences(normalized, params.windowSize);
+      // 2. Prepare Multivariate Data (Normalized all 4 inputs)
+      const { normalizedFeatures, mins, maxs, ma3, ma4, ema } = prepareMultivariateData(rawValues, params.emaPeriod);
+      
+      // 3. Create Sequences
+      const { X, y } = createSequences(normalizedFeatures, params.windowSize);
 
-      // 3. Build Model & Train
+      // 4. Build Model & Train
       const model = buildModel(params.windowSize, params.learningRate);
       
       const logArray = [];
@@ -117,12 +131,16 @@ const LstmProcess = () => {
         setProgress({ epoch: epoch + 1, loss: loss.toFixed(6), logs: displayLogs });
       });
 
-      // 4. Manual Extraction (for transparency)
-      const manualCalc = await getManualLSTMCalculation(model, X[X.length - 1]);
+      // 5. Manual Extraction (for transparency)
+      const manualCalc = await getManualLSTMCalculation(model);
 
-      // 5. Predict
+      // 6. Predict Historical
       const preds = predict(model, X);
-      const denormalizedPreds = denormalizeData(preds, min, max);
+      const denormalizedPreds = preds.map(p => denormalizeData(p, mins[0], maxs[0]));
+      
+      // 7. Multi-Step Forecasting (Feature 1)
+      const lastWindow = normalizedFeatures.slice(-params.windowSize);
+      const forecastResults = await multiStepForecast(model, lastWindow, params.forecastSteps, mins, maxs, params.emaPeriod);
       
       const actualsForMetrics = rawValues.slice(params.windowSize);
       const datesForMetrics = dates.slice(params.windowSize);
@@ -134,17 +152,26 @@ const LstmProcess = () => {
         actuals: actualsForMetrics,
         predictions: denormalizedPreds.map(p => Math.round(p)),
         metrics,
-        min,
-        max,
-        normalized: normalized.map((val, i) => ({ date: dates[i], original: rawValues[i], norm: val.toFixed(4) })),
-        manualCalculation: manualCalc
+        min: mins[0],
+        max: maxs[0],
+        normalized: normalizedFeatures.map((row, i) => ({ 
+          date: dates[i], 
+          original: rawValues[i], 
+          norm: row[0].toFixed(4),
+          ma3: row[1].toFixed(4),
+          ma4: row[2].toFixed(4),
+          ema: row[3].toFixed(4)
+        })),
+        manualCalculation: manualCalc,
+        audit,
+        forecast: forecastResults
       };
 
       setResults(finalResults);
       setStatus('success');
       setOpenAccordion('results');
 
-      // 6. Save History (Async background)
+      // 8. Save History (Async background)
       try {
         await api.post('/data/predictions.php', {
           epochs: params.epochs,
@@ -153,10 +180,19 @@ const LstmProcess = () => {
           metrics,
           dates: datesForMetrics,
           actuals: actualsForMetrics,
-          predictions: denormalizedPreds.map(p => Math.round(p))
+          predictions: denormalizedPreds.map(p => Math.round(p)),
+          normalized: finalResults.normalized,
+          min: finalResults.min,
+          max: finalResults.max,
+          manualCalculation: finalResults.manualCalculation,
+          forecast: forecastResults // Save forecast too
         });
         fetchHistory();
-        toast.success('Hasil prediksi berhasil disimpan ke riwayat! ✅');
+        if (audit.status === 'warning') {
+          toast('Hasil didapat dengan peringatan audit data.', { icon: '⚠️' });
+        } else {
+          toast.success('Hasil prediksi berhasil disimpan ke riwayat! ✅');
+        }
       } catch (dbError) {
         console.error('DB Save Error:', dbError);
         toast('Prediksi selesai, namun gagal menyimpan ke database (Mode Offline)', { icon: '⚠️' });
@@ -174,16 +210,21 @@ const LstmProcess = () => {
     try {
       const historyResults = JSON.parse(h.results_json);
       setResults({
-        dates: historyResults.dates,
-        actuals: historyResults.actuals,
-        predictions: historyResults.predictions,
+        dates: historyResults.dates || [],
+        actuals: historyResults.actuals || [],
+        predictions: historyResults.predictions || [],
         metrics: {
           mse: h.mse,
           rmse: h.rmse,
           mape: h.mape
         },
-        normalized: null, // Not stored
-        manualCalculation: null // Not stored
+        min: historyResults.min || 0,
+        max: historyResults.max || 1,
+        windowSize: h.window_size, // Simpan window size historis
+        normalized: historyResults.normalized || [],
+        manualCalculation: historyResults.manualCalculation || null,
+        audit: historyResults.audit || null,
+        forecast: historyResults.forecast || []
       });
       setStatus('success');
       setOpenAccordion('results');
@@ -194,31 +235,134 @@ const LstmProcess = () => {
     }
   };
 
+  const pinCurrentResult = () => {
+    setPinnedResult(JSON.parse(JSON.stringify(results)));
+    toast.success('Skenario berhasil di-pin untuk perbandingan!');
+  };
+
   const handleExportPDF = () => {
     if (!results.metrics) return toast.error('Lakukan perhitungan terlebih dahulu.');
+    
     const doc = new jsPDF();
-    doc.setFontSize(18);
-    doc.text('Laporan Hasil Prediksi LSTM', 14, 22);
-    doc.setFontSize(11);
-    doc.text(`Tanggal Cetak: ${new Date().toLocaleString()}`, 14, 30);
+    const pageWidth = doc.internal.pageSize.width;
+    
+    // Header
+    doc.setFillColor(31, 41, 55); // Dark blue gray
+    doc.rect(0, 0, pageWidth, 40, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont('helvetica', 'bold');
+    doc.text('SkyPredict LSTM Analytics', 14, 25);
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Laporan Hasil Analisis Prediksi Penjualan Tiket Pesawat', 14, 32);
+    
+    doc.setTextColor(100, 116, 139);
+    doc.text(`ID Laporan: #PRD-${Date.now().toString().slice(-6)}`, pageWidth - 50, 25);
+    doc.text(`Tanggal Cetak: ${new Date().toLocaleString('id-ID')}`, pageWidth - 70, 32);
+
+    // Section 1: Konfigurasi Model
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('1. Konfigurasi Parameter Model', 14, 55);
     
     doc.autoTable({
-      startY: 40,
-      head: [['Metric', 'Value']],
+      startY: 60,
+      head: [['Parameter', 'Nilai Setting']],
       body: [
-        ['MSE', results.metrics.mse],
-        ['RMSE', results.metrics.rmse],
-        ['MAPE', `${results.metrics.mape}%`]
-      ]
+        ['Jumlah Epochs', params.epochs],
+        ['Learning Rate', params.learningRate],
+        ['Window Size (Lag)', params.windowSize],
+        ['EMA Period', params.emaPeriod],
+        ['Target Penjualan', params.salesTarget.toLocaleString() + ' Tiket']
+      ],
+      theme: 'striped',
+      headStyles: { fillColor: [59, 130, 246] }
     });
+
+    // Section 2: Metrik Akurasi
+    doc.text('2. Evaluasi Akurasi Prediksi', 14, doc.lastAutoTable.finalY + 15);
+    doc.autoTable({
+      startY: doc.lastAutoTable.finalY + 20,
+      head: [['Metrik Evaluasi', 'Skor Hasil']],
+      body: [
+        ['MSE (Mean Squared Error)', results.metrics.mse],
+        ['RMSE (Root Mean Squared Error)', results.metrics.rmse],
+        ['MAPE (Mean Absolute Percentage Error)', `${results.metrics.mape}%`]
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [16, 185, 129] }
+    });
+
+    // Section 3: Ringkasan Audit (Jika ada)
+    if (results.audit && results.audit.issues.length > 0) {
+      doc.text('3. Catatan Audit Data', 14, doc.lastAutoTable.finalY + 15);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'italic');
+      results.audit.issues.forEach((issue, idx) => {
+        doc.text(`- ${issue}`, 14, doc.lastAutoTable.finalY + 22 + (idx * 5));
+      });
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+    }
+
+    // Section 4: Hasil Prediksi & Proyeksi (Next Page if needed)
+    doc.addPage();
+    doc.text('4. Detail Perhitungan & Proyeksi Mingguan', 14, 20);
+    
+    const tableBody = results.dates.map((d, i) => [
+      i + 1, 
+      d, 
+      results.actuals[i].toLocaleString(), 
+      results.predictions[i].toLocaleString(),
+      Math.abs(results.actuals[i] - results.predictions[i]).toLocaleString()
+    ]);
+
+    // Tambahkan Proyeksi Masa Depan ke Tabel
+    if (results.forecast) {
+      results.forecast.forEach(f => {
+        tableBody.push([
+          `F${f.weekOffset}`, 
+          `Proyeksi Ming- ${f.weekOffset}`, 
+          '-', 
+          f.value.toLocaleString(),
+          '-'
+        ]);
+      });
+    }
 
     doc.autoTable({
-      startY: doc.lastAutoTable.finalY + 10,
-      head: [['Periode', 'Aktual', 'Prediksi']],
-      body: results.dates.map((d, i) => [d, results.actuals[i], results.predictions[i]])
+      startY: 25,
+      head: [['No', 'Periode', 'Data Aktual', 'Hasil Prediksi', 'Selisih (Error)']],
+      body: tableBody,
+      headStyles: { fillColor: [71, 85, 105] },
+      columnStyles: {
+        2: { halign: 'right' },
+        3: { halign: 'right' },
+        4: { halign: 'right' }
+      },
+      didParseCell: function(data) {
+        if (data.row.cells[0].text[0] === 'F') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [240, 253, 244]; // Light green for forecast rows
+        }
+      }
     });
 
-    doc.save(`Laporan-Prediksi-${Date.now()}.pdf`);
+    // Footer
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(10);
+      doc.setTextColor(150);
+      doc.text(`Halaman ${i} dari ${pageCount}`, pageWidth / 2, doc.internal.pageSize.height - 10, { align: 'center' });
+    }
+
+    doc.save(`Laporan-SkyPredict-LSTM-${Date.now().toString().slice(-6)}.pdf`);
+    toast.success('Laporan PDF berhasil diunduh!');
   };
 
   const handleExportExcel = () => {
@@ -267,17 +411,35 @@ const LstmProcess = () => {
           <div className="glass-panel p-8 max-w-md w-full border-primary/20">
             <h2 className="text-xl font-bold text-white mb-6">Konfigurasi Model LSTM</h2>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Epochs (Iterasi Pelatihan)</label>
-                <input type="number" className="input-field" value={params.epochs} onChange={e => setParams({...params, epochs: parseInt(e.target.value)})} />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Epochs (1-300)</label>
+                  <input type="number" min="1" max="300" className="input-field" value={params.epochs} onChange={e => setParams({...params, epochs: Math.min(300, parseInt(e.target.value) || 1)})} />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Learning Rate</label>
+                  <input type="number" step="0.001" className="input-field" value={params.learningRate} onChange={e => setParams({...params, learningRate: parseFloat(e.target.value)})} />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Learning Rate</label>
-                <input type="number" step="0.001" className="input-field" value={params.learningRate} onChange={e => setParams({...params, learningRate: parseFloat(e.target.value)})} />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Window Size (1-8)</label>
+                  <input type="number" min="1" max="8" className="input-field" value={params.windowSize} onChange={e => setParams({...params, windowSize: Math.min(8, parseInt(e.target.value) || 1)})} />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">EMA Period</label>
+                  <input type="number" min="1" max="20" className="input-field" value={params.emaPeriod} onChange={e => setParams({...params, emaPeriod: parseInt(e.target.value) || 1})} />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Window Size (Lookback)</label>
-                <input type="number" className="input-field" value={params.windowSize} onChange={e => setParams({...params, windowSize: parseInt(e.target.value)})} />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Forecast (Weeks)</label>
+                  <input type="number" min="1" max="12" className="input-field" value={params.forecastSteps} onChange={e => setParams({...params, forecastSteps: Math.min(12, parseInt(e.target.value) || 1)})} />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Sales Target</label>
+                  <input type="number" className="input-field" value={params.salesTarget} onChange={e => setParams({...params, salesTarget: parseInt(e.target.value) || 0})} />
+                </div>
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-8">
@@ -337,23 +499,82 @@ const LstmProcess = () => {
               animate={{ opacity: 1, y: 0 }}
               className="space-y-6"
             >
-              <div className="glass-panel p-6 border-b-4 border-primary shadow-xl">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <TrendingUp size={20} className="text-primary" /> Visualisasi Prediksi vs Aktual
-                  </h3>
-                  <div className="flex gap-4 text-[10px] uppercase font-bold tracking-widest">
-                    <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-gray-600"></span> Aktual</div>
-                    <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-primary"></span> Prediksi</div>
+              {/* Feature 3: Audit Summary Banner */}
+              {results.audit && results.audit.status !== 'healthy' && (
+                <div className="bg-orange-500/10 border border-orange-500/20 rounded-2xl p-5 flex items-start gap-4">
+                  <AlertCircle className="text-orange-500 mt-1 flex-shrink-0" size={24} />
+                  <div>
+                    <h4 className="text-orange-500 font-bold text-sm uppercase tracking-wider">Audit Data Quality: {results.audit.status}</h4>
+                    <ul className="mt-2 space-y-1">
+                      {results.audit.issues.map((issue, idx) => (
+                        <li key={idx} className="text-xs text-gray-400 flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-orange-500/40"></span> {issue}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 </div>
-                <div className="h-72 w-full">
+              )}
+
+              {/* Feature 5: Threshold Alert Banner */}
+              {results.forecast.some(f => f.value < params.salesTarget) && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-5 flex items-start gap-4">
+                  <TrendingUp className="text-red-500 mt-1 flex-shrink-0 rotate-180" size={24} />
+                  <div>
+                    <h4 className="text-red-500 font-bold text-sm uppercase tracking-wider">Peringatan: Penjualan Di Bawah Target</h4>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Beberapa proyeksi masa depan terdeteksi berada di bawah target <strong>{params.salesTarget.toLocaleString()}</strong> tiket.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="glass-panel p-6 border-b-4 border-primary shadow-xl">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <TrendingUp size={20} className="text-primary" /> Visualisasi Prediksi & Proyeksi
+                  </h3>
+                  <div className="flex flex-wrap gap-4 text-[10px] uppercase font-bold tracking-widest">
+                    <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-gray-600"></span> Aktual</div>
+                    <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500"></span> MA3 (Baseline)</div>
+                    <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-primary"></span> Prediksi</div>
+                    <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-accent"></span> Proyeksi</div>
+                    {pinnedResult && <div className="flex items-center gap-1.5"><span className="w-2 h-0.5 bg-gray-400"></span> Pinned</div>}
+                  </div>
+                </div>
+                <div className="h-80 w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={results.dates.map((d, i) => ({ date: d, Actual: results.actuals[i], Prediction: results.predictions[i] }))}>
+                    <AreaChart data={[
+                      ...results.dates.map((d, i) => {
+                        const winSize = results.windowSize || params.windowSize;
+                        const baselineVal = (results.normalized && results.normalized[i + winSize]) 
+                          ? Math.round(parseFloat(results.normalized[i + winSize].ma3) * (results.max - results.min) + results.min) 
+                          : null;
+                        
+                        return { 
+                          date: d, 
+                          Actual: results.actuals[i], 
+                          Prediction: results.predictions[i],
+                          // Titik terakhir prediksi disambungkan ke awal proyeksi
+                          Projection: i === results.dates.length - 1 ? results.predictions[i] : null,
+                          Baseline: baselineVal,
+                          Pinned: pinnedResult ? pinnedResult.predictions[i] : null
+                        };
+                      }),
+                      ...(results.forecast || []).map(f => ({
+                        date: `Next Week ${f.weekOffset}`,
+                        Projection: f.value,
+                        Target: params.salesTarget
+                      }))
+                    ]}>
                       <defs>
                         <linearGradient id="colorPred" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
                           <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="colorProj" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
@@ -361,9 +582,21 @@ const LstmProcess = () => {
                       <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
                       <RechartsTooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '12px' }} />
                       <Area type="monotone" dataKey="Actual" stroke="#475569" strokeWidth={2} fill="transparent" />
+                      <Area type="monotone" dataKey="Baseline" stroke="#f59e0b" strokeWidth={1} strokeDasharray="3 3" fill="transparent" />
+                      <Area type="monotone" dataKey="Pinned" stroke="#94a3b8" strokeWidth={1} strokeDasharray="5 5" fill="transparent" />
                       <Area type="monotone" dataKey="Prediction" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorPred)" />
+                      <Area type="monotone" dataKey="Projection" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorProj)" />
                     </AreaChart>
                   </ResponsiveContainer>
+                </div>
+                {/* Feature 4: What-If Comparison Button */}
+                <div className="flex justify-end mt-4">
+                  <button 
+                    onClick={pinCurrentResult}
+                    className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-white transition-colors"
+                  >
+                    <Download size={14} /> Pin Skenario Ini Untuk Perbandingan
+                  </button>
                 </div>
               </div>
 
@@ -373,12 +606,17 @@ const LstmProcess = () => {
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left text-gray-300">
                       <thead className="text-xs uppercase bg-gray-800">
-                        <tr><th>Periode</th><th>Aktual</th><th>Ternormalisasi</th></tr>
+                        <tr><th>Periode</th><th>Aktual</th><th>Norm</th><th>MA3</th><th>MA4</th><th>EMA</th></tr>
                       </thead>
                       <tbody>
                         {results.normalized ? results.normalized.slice(0, 10).map((n, i) => (
                           <tr key={i} className="border-b border-gray-700">
-                            <td className="py-2">{n.date}</td><td>{n.original}</td><td className="text-accent">{n.norm}</td>
+                            <td className="py-2">{n.date}</td>
+                            <td>{n.original}</td>
+                            <td className="text-accent">{n.norm}</td>
+                            <td className="text-blue-400">{n.ma3}</td>
+                            <td className="text-purple-400">{n.ma4}</td>
+                            <td className="text-orange-400">{n.ema}</td>
                           </tr>
                         )) : (
                           <tr><td colSpan="3" className="py-4 text-center text-gray-500 italic text-xs">Detail normalisasi tidak tersedia untuk riwayat lama.</td></tr>
@@ -389,24 +627,55 @@ const LstmProcess = () => {
                 </AccordionItem>
 
                 {results.manualCalculation && (
-                  <AccordionItem title="2. Bobot Gate LSTM (Layer 1 - Unit 1)" isOpen={openAccordion === 'calc'} onToggle={() => setOpenAccordion(openAccordion === 'calc' ? '' : 'calc')}>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <div className="bg-gray-800/50 p-4 rounded-lg border border-red-500/20">
-                        <h4 className="font-semibold text-red-400 text-sm mb-2">Forget Gate (f)</h4>
-                        <p className="text-[10px] text-gray-400">Weight: {results.manualCalculation.forgetGate.kernel}</p>
-                        <p className="text-[10px] text-gray-400">Bias: {results.manualCalculation.forgetGate.bias}</p>
+                  <AccordionItem title="2. Detail Bobot Gerbang LSTM (Slicing 2x5)" isOpen={openAccordion === 'calc'} onToggle={() => setOpenAccordion(openAccordion === 'calc' ? '' : 'calc')}>
+                    <div className="space-y-8 overflow-x-auto pb-4">
+                      {/* Grid untuk 4 Gerbang Utama */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        {[
+                          { id: 'forgetGate', name: '1. Forget Gate (W_f)', color: 'red' },
+                          { id: 'inputGate', name: '2. Input Gate (W_i)', color: 'blue' },
+                          { id: 'candidateGate', name: '3. Candidate Cell (W_c)', color: 'green' },
+                          { id: 'outputGate', name: '4. Output Gate (W_o)', color: 'orange' }
+                        ].map(gate => (
+                          <div key={gate.id} className={`border border-${gate.color}-500/20 rounded-xl overflow-hidden bg-gray-900/40`}>
+                            <h4 className={`font-bold text-${gate.color}-400 bg-${gate.color}-500/5 px-4 py-2 text-sm border-b border-${gate.color}-500/20 flex justify-between`}>
+                              {gate.name}
+                              <span className="text-[10px] opacity-50 font-mono">Sample 2x5</span>
+                            </h4>
+                            <table className="w-full text-left text-gray-300 text-[11px]">
+                              <thead>
+                                <tr className="bg-gray-800/30">
+                                  <th className="px-3 py-2 border-b border-gray-800">Feature</th>
+                                  {[1,2,3,4,5].map(n => <th key={n} className="px-3 py-2 border-b border-gray-800">C{n}</th>)}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {results.manualCalculation[gate.id]?.map((row, i) => (
+                                  <tr key={i} className="border-b border-gray-800/30">
+                                    <td className="px-3 py-2 font-bold text-gray-500 bg-gray-800/10">F{i+1}</td>
+                                    {row.map((val, j) => <td key={j} className="px-3 py-2 font-mono">{val.toFixed(6)}</td>)}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ))}
                       </div>
-                      <div className="bg-gray-800/50 p-4 rounded-lg border border-blue-500/20">
-                        <h4 className="font-semibold text-blue-400 text-sm mb-2">Input Gate (i)</h4>
-                        <p className="text-[10px] text-gray-400">Weight: {results.manualCalculation.inputGate.kernel}</p>
-                      </div>
-                      <div className="bg-gray-800/50 p-4 rounded-lg border border-green-500/20">
-                        <h4 className="font-semibold text-green-400 text-sm mb-2">Cell Candidate (C)</h4>
-                        <p className="text-[10px] text-gray-400">Weight: {results.manualCalculation.candidateGate.kernel}</p>
-                      </div>
-                      <div className="bg-gray-800/50 p-4 rounded-lg border border-orange-500/20">
-                        <h4 className="font-semibold text-orange-400 text-sm mb-2">Output Gate (o)</h4>
-                        <p className="text-[10px] text-gray-400">Weight: {results.manualCalculation.outputGate.kernel}</p>
+
+                      {/* Baris Kelima: Bias */}
+                      <div className="border border-purple-500/20 rounded-xl overflow-hidden bg-gray-900/40">
+                        <h4 className="font-bold text-purple-400 bg-purple-500/5 px-4 py-2 text-sm border-b border-purple-500/20 flex justify-between">
+                          5. Bias Vector (b)
+                          <span className="text-[10px] opacity-50 font-mono">Sample 2x5</span>
+                        </h4>
+                        <div className="p-4 grid grid-cols-5 gap-4">
+                          {results.manualCalculation.bias?.map((val, i) => (
+                            <div key={i} className="bg-gray-800/40 border border-gray-700/50 p-2 rounded-lg text-center">
+                              <span className="block text-[9px] text-gray-500 uppercase mb-1">b_{i+1}</span>
+                              <span className="text-xs font-mono text-accent">{val.toFixed(6)}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </AccordionItem>
@@ -426,6 +695,18 @@ const LstmProcess = () => {
                             <td className="px-4 py-2 text-right">{results.actuals[i]}</td>
                             <td className="px-4 py-2 text-right font-bold text-accent">{results.predictions[i]}</td>
                             <td className="px-4 py-2 text-right text-gray-500">{Math.abs(results.actuals[i] - results.predictions[i])}</td>
+                          </tr>
+                        ))}
+                        {/* Feature 1: Future Forecast Rows */}
+                        {results.forecast && results.forecast.map((f, i) => (
+                          <tr key={`f-${i}`} className="border-b border-gray-700 bg-primary/5">
+                            <td className="px-4 py-2 text-primary font-bold">F{f.weekOffset}</td>
+                            <td className="px-4 py-2 text-primary">Proyeksi Masa Depan {f.weekOffset}</td>
+                            <td className="px-4 py-2 text-right text-gray-600">-</td>
+                            <td className="px-4 py-2 text-right font-bold text-primary">{f.value}</td>
+                            <td className="px-4 py-2 text-right">
+                              {f.value < params.salesTarget && <span className="text-[10px] bg-red-500/20 text-red-400 px-2 py-1 rounded">Below Target</span>}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -474,10 +755,28 @@ const LstmProcess = () => {
         {/* History Table - Always visible unless training */}
         {status !== 'training' && (
           <div className="mt-12 print:hidden">
-            <AccordionItem title="4. Riwayat Prediksi Sebelumnya" isOpen={openAccordion === 'history'} onToggle={() => setOpenAccordion(openAccordion === 'history' ? '' : 'history')} icon={Calendar}>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left text-gray-300">
-                  <thead className="text-xs uppercase bg-gray-800">
+            <div className="flex justify-between items-center mb-4 px-2">
+               <h3 className="text-sm font-bold text-gray-500 uppercase tracking-[0.2em] flex items-center gap-2">
+                 <Calendar size={16} className="text-primary" /> Riwayat Prediksi
+               </h3>
+               {history.length > 0 && (
+                 <button 
+                   onClick={async () => {
+                     if(window.confirm('Hapus semua riwayat prediksi?')) {
+                       await api.delete('/data/predictions.php?all=true');
+                       fetchHistory();
+                       toast.success('Riwayat dibersihkan');
+                     }
+                   }}
+                   className="text-[10px] text-red-400 hover:text-red-300 transition-colors uppercase font-bold tracking-widest bg-red-500/5 px-3 py-1 rounded-full border border-red-500/10"
+                 >
+                   Clear All History
+                 </button>
+               )}
+            </div>
+            <div className="overflow-x-auto glass-panel rounded-xl border-gray-700/50">
+                <table className="w-full text-sm text-left text-gray-400">
+                  <thead className="text-xs uppercase bg-gray-800/80">
                     <tr>
                       <th className="px-4 py-3 text-center">Aksi</th>
                       <th className="px-4 py-3">Tanggal Run</th>
@@ -488,24 +787,42 @@ const LstmProcess = () => {
                   </thead>
                   <tbody>
                     {history.length > 0 ? history.map((h, i) => (
-                      <tr key={i} className="border-b border-gray-700 hover:bg-gray-800/40 transition-colors">
+                      <tr key={i} className="border-b border-gray-700/30 hover:bg-gray-800/40 transition-colors">
                         <td className="px-4 py-3 text-center">
-                          <button onClick={() => handleViewHistory(h)} className="p-2 bg-primary/10 text-primary rounded-lg hover:bg-primary hover:text-white transition-all">
-                            <Eye size={14} />
-                          </button>
+                          <div className="flex items-center justify-center gap-2">
+                            <button onClick={() => handleViewHistory(h)} className="p-2 bg-primary/10 text-primary rounded-lg hover:bg-primary hover:text-white transition-all" title="Lihat Detail">
+                              <Eye size={14} />
+                            </button>
+                            <button 
+                              onClick={async () => {
+                                if(window.confirm('Hapus riwayat ini?')) {
+                                  await api.delete(`/data/predictions.php?id=${h.id}`);
+                                  fetchHistory();
+                                  toast.success('Terhapus');
+                                }
+                              }}
+                              className="p-2 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500 hover:text-white transition-all"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </td>
-                        <td className="px-4 py-3 text-xs">{new Date(h.run_date).toLocaleString('id-ID')}</td>
+                        <td className="px-4 py-3 text-xs flex items-center gap-2">
+                          {new Date(h.run_date).toLocaleString('id-ID')}
+                          {h.results_json.includes('"status":"warning"') && (
+                            <AlertCircle size={14} className="text-amber-500" title="Data mengandung anomali" />
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-[10px] text-gray-500">{h.epochs} Ep / {h.window_size} W</td>
                         <td className="px-4 py-3 text-center text-green-400 font-bold">{parseFloat(h.mape).toFixed(2)}%</td>
                         <td className="px-4 py-3 text-center text-accent">{parseFloat(h.rmse).toFixed(2)}</td>
                       </tr>
                     )) : (
-                      <tr><td colSpan="5" className="px-4 py-8 text-center text-gray-600">Belum ada riwayat.</td></tr>
+                      <tr><td colSpan="5" className="px-4 py-8 text-center text-gray-600 italic">Belum ada riwayat.</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
-            </AccordionItem>
           </div>
         )}
       </div>
