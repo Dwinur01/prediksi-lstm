@@ -17,6 +17,8 @@ const Dashboard = () => {
   const [latestForecast, setLatestForecast] = useState(null);
   const [auditAlerts, setAuditAlerts] = useState(null);
   const [lastRunDate, setLastRunDate] = useState(null);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     fetchData();
@@ -75,6 +77,17 @@ const Dashboard = () => {
     setStats({ total, avg, latest });
   };
 
+  const filteredData = data.filter(item => 
+    item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    item.tickets_sold.toString().includes(searchTerm)
+  );
+
+  const displayedData = rowsPerPage === 'all' 
+    ? filteredData 
+    : filteredData.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+  const totalPages = rowsPerPage === 'all' ? 1 : Math.ceil(filteredData.length / rowsPerPage);
+
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
@@ -106,11 +119,6 @@ const Dashboard = () => {
         <h3 className="text-3xl font-bold mt-1 tabular-nums drop-shadow-md">{value}</h3>
       </div>
     </motion.div>
-  );
-
-  const filteredData = data.filter(item => 
-    item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    item.tickets_sold.toString().includes(searchTerm)
   );
 
   return (
@@ -357,8 +365,34 @@ const Dashboard = () => {
               placeholder="Cari periode..."
               className="input-field pl-10 py-2 text-sm bg-gray-800/80 focus:bg-gray-800 border-gray-700/50"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
             />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between mb-3 px-1">
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <span>Show</span>
+            <select 
+              value={rowsPerPage} 
+              onChange={(e) => {
+                setRowsPerPage(e.target.value === 'all' ? 'all' : parseInt(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="bg-gray-800 border border-gray-700 text-gray-300 rounded px-1 py-0.5 outline-none focus:border-primary"
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value="all">All</option>
+            </select>
+            <span>entries</span>
+          </div>
+          <div className="text-xs text-gray-500">
+            Showing {displayedData.length} of {filteredData.length} entries
           </div>
         </div>
         
@@ -373,7 +407,7 @@ const Dashboard = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/50">
-              {filteredData.map((item, index) => (
+              {displayedData.map((item, index) => (
                 <motion.tr 
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -382,7 +416,7 @@ const Dashboard = () => {
                   key={index} 
                   className="hover:bg-gray-800/40 transition-all duration-200 group origin-left cursor-default"
                 >
-                  <td className="px-4 py-3 text-gray-500 group-hover:text-gray-300 transition-colors">{index + 1}</td>
+                  <td className="px-4 py-3 text-gray-500 group-hover:text-gray-300 transition-colors">{(currentPage - 1) * (rowsPerPage === 'all' ? 0 : rowsPerPage) + index + 1}</td>
                   <td className="px-4 py-3 font-medium text-gray-200 group-hover:text-primary transition-colors">{item.name}</td>
                   <td className="px-4 py-3 text-xs text-gray-500 italic">
                     {item.created_at ? new Date(item.created_at).toLocaleString('id-ID', { 
@@ -398,7 +432,7 @@ const Dashboard = () => {
                   </td>
                 </motion.tr>
               ))}
-              {filteredData.length === 0 && (
+              {displayedData.length === 0 && (
                 <tr>
                   <td colSpan="4" className="px-4 py-12 text-center text-gray-600 italic">
                     Data tidak ditemukan.
@@ -408,6 +442,26 @@ const Dashboard = () => {
             </tbody>
           </table>
         </div>
+
+        {rowsPerPage !== 'all' && totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 mt-4">
+            <button 
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(prev => prev - 1)}
+              className="px-3 py-1 bg-gray-800 text-gray-400 rounded-lg hover:bg-gray-700 disabled:opacity-30 text-xs"
+            >
+              Prev
+            </button>
+            <span className="text-xs text-gray-500">Page {currentPage} of {totalPages}</span>
+            <button 
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(prev => prev + 1)}
+              className="px-3 py-1 bg-gray-800 text-gray-400 rounded-lg hover:bg-gray-700 disabled:opacity-30 text-xs"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </motion.div>
     </motion.div>
   );

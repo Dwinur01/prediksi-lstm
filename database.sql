@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS ticket_sales (
     id VARCHAR(50) PRIMARY KEY,
+    sale_date DATE NULL,
     week INT NOT NULL,
     year INT NOT NULL,
     tickets_sold INT NOT NULL,
@@ -33,11 +34,10 @@ CREATE TABLE IF NOT EXISTS prediction_history (
 CREATE TABLE IF NOT EXISTS lstm_weights (
     id INT AUTO_INCREMENT PRIMARY KEY,
     history_id INT NOT NULL,
-    kernel_sample LONGTEXT,
-    recurrent_sample LONGTEXT,
-    bias_sample LONGTEXT,
+    weights_json LONGTEXT,
     FOREIGN KEY (history_id) REFERENCES prediction_history(id) ON DELETE CASCADE
 );
 
 -- Indexes for fast ordering
 CREATE INDEX idx_year_week ON ticket_sales(year, week);
+CREATE INDEX idx_sale_date ON ticket_sales(sale_date);

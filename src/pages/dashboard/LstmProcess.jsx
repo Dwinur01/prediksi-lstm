@@ -63,11 +63,61 @@ const LstmProcess = () => {
   const [pinnedResult, setPinnedResult] = useState(null);
   const [showConfig, setShowConfig] = useState(false);
   const [openAccordion, setOpenAccordion] = useState('');
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
+  
+  // States for Normalization Table
+  const [normRowsPerPage, setNormRowsPerPage] = useState(5);
+  const [normCurrentPage, setNormCurrentPage] = useState(1);
+  
+  // States for Prediction Result Table
+  const [predRowsPerPage, setPredRowsPerPage] = useState(10);
+  const [predCurrentPage, setPredCurrentPage] = useState(1);
 
   useEffect(() => {
     fetchData();
     fetchHistory();
   }, []);
+
+  const displayedHistory = rowsPerPage === 'all' 
+    ? history 
+    : history.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+  const totalPages = rowsPerPage === 'all' ? 1 : Math.ceil(history.length / rowsPerPage);
+
+  // Pagination for Normalization
+  const displayedNorm = !results.normalized ? [] : (normRowsPerPage === 'all' 
+    ? results.normalized 
+    : results.normalized.slice((normCurrentPage - 1) * normRowsPerPage, normCurrentPage * normRowsPerPage));
+  
+  const normTotalPages = !results.normalized ? 1 : (normRowsPerPage === 'all' ? 1 : Math.ceil(results.normalized.length / normRowsPerPage));
+
+  // Pagination for Prediction Results
+  // Combine dates, actuals, predictions, and forecast into one array for easier pagination
+  const fullResultsArray = !results.dates ? [] : [
+    ...results.dates.map((date, i) => ({
+      type: 'actual',
+      index: i + 1,
+      date,
+      actual: results.actuals[i],
+      prediction: results.predictions[i],
+      diff: Math.abs(results.actuals[i] - results.predictions[i])
+    })),
+    ...(results.forecast || []).map((f, i) => ({
+      type: 'forecast',
+      index: `F${f.weekOffset}`,
+      date: `Proyeksi Masa Depan ${f.weekOffset}`,
+      actual: '-',
+      prediction: f.value,
+      diff: f.value < params.salesTarget ? 'Below Target' : '-'
+    }))
+  ];
+
+  const displayedPred = predRowsPerPage === 'all' 
+    ? fullResultsArray 
+    : fullResultsArray.slice((predCurrentPage - 1) * predRowsPerPage, predCurrentPage * predRowsPerPage);
+
+  const predTotalPages = predRowsPerPage === 'all' ? 1 : Math.ceil(fullResultsArray.length / predRowsPerPage);
 
   const fetchData = async () => {
     try {
@@ -603,13 +653,34 @@ const LstmProcess = () => {
               <div className="space-y-4">
                 <AccordionItem title="1. Normalisasi Min-Max" isOpen={openAccordion === 'norm'} onToggle={() => setOpenAccordion(openAccordion === 'norm' ? '' : 'norm')}>
                   <p className="text-sm text-gray-400 mb-3">Data diubah ke skala 0-1 untuk mempermudah pelatihan. (Min: {results.min || '-'}, Max: {results.max || '-'})</p>
+                  <div className="flex justify-between items-center mb-3 px-1">
+                    <div className="flex items-center gap-2 text-[10px] text-gray-500 uppercase font-bold tracking-widest">
+                      <span>Show</span>
+                      <select 
+                        value={normRowsPerPage} 
+                        onChange={(e) => {
+                          setNormRowsPerPage(e.target.value === 'all' ? 'all' : parseInt(e.target.value));
+                          setNormCurrentPage(1);
+                        }}
+                        className="bg-gray-800 border border-gray-700 text-gray-400 rounded px-1 py-0.5 outline-none focus:border-primary"
+                      >
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={25}>25</option>
+                        <option value="all">All</option>
+                      </select>
+                    </div>
+                    <div className="text-[10px] text-gray-500 italic">
+                      Showing {displayedNorm.length} of {results.normalized?.length || 0} entries
+                    </div>
+                  </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left text-gray-300">
                       <thead className="text-xs uppercase bg-gray-800">
                         <tr><th>Periode</th><th>Aktual</th><th>Norm</th><th>MA3</th><th>MA4</th><th>EMA</th></tr>
                       </thead>
                       <tbody>
-                        {results.normalized ? results.normalized.slice(0, 10).map((n, i) => (
+                        {displayedNorm.length > 0 ? displayedNorm.map((n, i) => (
                           <tr key={i} className="border-b border-gray-700">
                             <td className="py-2">{n.date}</td>
                             <td>{n.original}</td>
@@ -619,11 +690,30 @@ const LstmProcess = () => {
                             <td className="text-orange-400">{n.ema}</td>
                           </tr>
                         )) : (
-                          <tr><td colSpan="3" className="py-4 text-center text-gray-500 italic text-xs">Detail normalisasi tidak tersedia untuk riwayat lama.</td></tr>
+                          <tr><td colSpan="6" className="py-4 text-center text-gray-500 italic text-xs">Detail normalisasi tidak tersedia atau data kosong.</td></tr>
                         )}
                       </tbody>
                     </table>
                   </div>
+                  {normRowsPerPage !== 'all' && normTotalPages > 1 && (
+                    <div className="flex items-center justify-center gap-2 mt-4">
+                      <button 
+                        disabled={normCurrentPage === 1}
+                        onClick={() => setNormCurrentPage(prev => prev - 1)}
+                        className="px-2 py-0.5 bg-gray-800 text-gray-400 rounded hover:bg-gray-700 disabled:opacity-30 text-[10px] uppercase font-bold"
+                      >
+                        Prev
+                      </button>
+                      <span className="text-[10px] text-gray-500 font-bold">Page {normCurrentPage} of {normTotalPages}</span>
+                      <button 
+                        disabled={normCurrentPage === normTotalPages}
+                        onClick={() => setNormCurrentPage(prev => prev + 1)}
+                        className="px-2 py-0.5 bg-gray-800 text-gray-400 rounded hover:bg-gray-700 disabled:opacity-30 text-[10px] uppercase font-bold"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  )}
                 </AccordionItem>
 
                 {results.manualCalculation && (
@@ -682,36 +772,68 @@ const LstmProcess = () => {
                 )}
 
                 <AccordionItem title="3. Hasil Prediksi vs Aktual" isOpen={openAccordion === 'results'} onToggle={() => setOpenAccordion(openAccordion === 'results' ? '' : 'results')}>
+                  <div className="flex justify-between items-center mb-3 px-1">
+                    <div className="flex items-center gap-2 text-[10px] text-gray-500 uppercase font-bold tracking-widest">
+                      <span>Show</span>
+                      <select 
+                        value={predRowsPerPage} 
+                        onChange={(e) => {
+                          setPredRowsPerPage(e.target.value === 'all' ? 'all' : parseInt(e.target.value));
+                          setPredCurrentPage(1);
+                        }}
+                        className="bg-gray-800 border border-gray-700 text-gray-400 rounded px-1 py-0.5 outline-none focus:border-primary"
+                      >
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={25}>25</option>
+                        <option value="all">All</option>
+                      </select>
+                    </div>
+                    <div className="text-[10px] text-gray-500 italic">
+                      Showing {displayedPred.length} of {fullResultsArray.length} entries
+                    </div>
+                  </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left text-gray-300">
                       <thead className="text-xs uppercase bg-gray-800">
                         <tr><th className="px-4 py-2">No</th><th className="px-4 py-2">Periode</th><th className="px-4 py-2 text-right">Aktual</th><th className="px-4 py-2 text-right">Prediksi</th><th className="px-4 py-2 text-right">Selisih</th></tr>
                       </thead>
                       <tbody>
-                        {results.dates.map((date, i) => (
-                          <tr key={i} className="border-b border-gray-700">
-                            <td className="px-4 py-2">{i+1}</td>
-                            <td className="px-4 py-2">{date}</td>
-                            <td className="px-4 py-2 text-right">{results.actuals[i]}</td>
-                            <td className="px-4 py-2 text-right font-bold text-accent">{results.predictions[i]}</td>
-                            <td className="px-4 py-2 text-right text-gray-500">{Math.abs(results.actuals[i] - results.predictions[i])}</td>
-                          </tr>
-                        ))}
-                        {/* Feature 1: Future Forecast Rows */}
-                        {results.forecast && results.forecast.map((f, i) => (
-                          <tr key={`f-${i}`} className="border-b border-gray-700 bg-primary/5">
-                            <td className="px-4 py-2 text-primary font-bold">F{f.weekOffset}</td>
-                            <td className="px-4 py-2 text-primary">Proyeksi Masa Depan {f.weekOffset}</td>
-                            <td className="px-4 py-2 text-right text-gray-600">-</td>
-                            <td className="px-4 py-2 text-right font-bold text-primary">{f.value}</td>
+                        {displayedPred.map((p, i) => (
+                          <tr key={i} className={`border-b border-gray-700 ${p.type === 'forecast' ? 'bg-primary/5' : ''}`}>
+                            <td className={`px-4 py-2 ${p.type === 'forecast' ? 'text-primary font-bold' : ''}`}>{p.index}</td>
+                            <td className={`px-4 py-2 ${p.type === 'forecast' ? 'text-primary' : ''}`}>{p.date}</td>
+                            <td className={`px-4 py-2 text-right ${p.type === 'forecast' ? 'text-gray-600' : ''}`}>{p.actual}</td>
+                            <td className={`px-4 py-2 text-right font-bold ${p.type === 'forecast' ? 'text-primary' : 'text-accent'}`}>{p.prediction}</td>
                             <td className="px-4 py-2 text-right">
-                              {f.value < params.salesTarget && <span className="text-[10px] bg-red-500/20 text-red-400 px-2 py-1 rounded">Below Target</span>}
+                              {p.type === 'actual' ? p.diff : (
+                                p.prediction < params.salesTarget ? <span className="text-[10px] bg-red-500/20 text-red-400 px-2 py-1 rounded">Below Target</span> : '-'
+                              )}
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
+                  {predRowsPerPage !== 'all' && predTotalPages > 1 && (
+                    <div className="flex items-center justify-center gap-2 mt-4">
+                      <button 
+                        disabled={predCurrentPage === 1}
+                        onClick={() => setPredCurrentPage(prev => prev - 1)}
+                        className="px-2 py-0.5 bg-gray-800 text-gray-400 rounded hover:bg-gray-700 disabled:opacity-30 text-[10px] uppercase font-bold"
+                      >
+                        Prev
+                      </button>
+                      <span className="text-[10px] text-gray-500 font-bold">Page {predCurrentPage} of {predTotalPages}</span>
+                      <button 
+                        disabled={predCurrentPage === predTotalPages}
+                        onClick={() => setPredCurrentPage(prev => prev + 1)}
+                        className="px-2 py-0.5 bg-gray-800 text-gray-400 rounded hover:bg-gray-700 disabled:opacity-30 text-[10px] uppercase font-bold"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  )}
                   <div className="flex gap-2 mt-4 print:hidden">
                     <button onClick={handleExportPDF} className="btn-secondary text-xs flex items-center gap-2"><Printer size={14} /> Cetak PDF</button>
                     <button onClick={handleExportExcel} className="btn-secondary text-xs flex items-center gap-2"><Download size={14} /> Export Excel</button>
@@ -759,20 +881,38 @@ const LstmProcess = () => {
                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-[0.2em] flex items-center gap-2">
                  <Calendar size={16} className="text-primary" /> Riwayat Prediksi
                </h3>
-               {history.length > 0 && (
-                 <button 
-                   onClick={async () => {
-                     if(window.confirm('Hapus semua riwayat prediksi?')) {
-                       await api.delete('/data/predictions.php?all=true');
-                       fetchHistory();
-                       toast.success('Riwayat dibersihkan');
-                     }
-                   }}
-                   className="text-[10px] text-red-400 hover:text-red-300 transition-colors uppercase font-bold tracking-widest bg-red-500/5 px-3 py-1 rounded-full border border-red-500/10"
-                 >
-                   Clear All History
-                 </button>
-               )}
+               <div className="flex items-center gap-4">
+                 <div className="flex items-center gap-2 text-[10px] text-gray-500 uppercase font-bold tracking-widest">
+                    <span>Show</span>
+                    <select 
+                      value={rowsPerPage} 
+                      onChange={(e) => {
+                        setRowsPerPage(e.target.value === 'all' ? 'all' : parseInt(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="bg-gray-800 border border-gray-700 text-gray-400 rounded px-2 py-1 outline-none focus:border-primary"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value="all">All</option>
+                    </select>
+                 </div>
+                 {history.length > 0 && (
+                   <button 
+                     onClick={async () => {
+                       if(window.confirm('Hapus semua riwayat prediksi?')) {
+                         await api.delete('/data/predictions.php?all=true');
+                         fetchHistory();
+                         toast.success('Riwayat dibersihkan');
+                       }
+                     }}
+                     className="text-[10px] text-red-400 hover:text-red-300 transition-colors uppercase font-bold tracking-widest bg-red-500/5 px-3 py-1 rounded-full border border-red-500/10"
+                   >
+                     Clear All
+                   </button>
+                 )}
+               </div>
             </div>
             <div className="overflow-x-auto glass-panel rounded-xl border-gray-700/50">
                 <table className="w-full text-sm text-left text-gray-400">
@@ -786,7 +926,7 @@ const LstmProcess = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {history.length > 0 ? history.map((h, i) => (
+                    {displayedHistory.length > 0 ? displayedHistory.map((h, i) => (
                       <tr key={i} className="border-b border-gray-700/30 hover:bg-gray-800/40 transition-colors">
                         <td className="px-4 py-3 text-center">
                           <div className="flex items-center justify-center gap-2">
@@ -823,6 +963,26 @@ const LstmProcess = () => {
                   </tbody>
                 </table>
               </div>
+
+              {rowsPerPage !== 'all' && totalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-4">
+                  <button 
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(prev => prev - 1)}
+                    className="px-3 py-1 bg-gray-800 text-gray-400 rounded-lg hover:bg-gray-700 disabled:opacity-30 text-[10px] font-bold uppercase tracking-widest"
+                  >
+                    Prev
+                  </button>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Page {currentPage} of {totalPages}</span>
+                  <button 
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(prev => prev + 1)}
+                    className="px-3 py-1 bg-gray-800 text-gray-400 rounded-lg hover:bg-gray-700 disabled:opacity-30 text-[10px] font-bold uppercase tracking-widest"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
           </div>
         )}
       </div>

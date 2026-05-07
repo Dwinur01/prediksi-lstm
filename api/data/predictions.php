@@ -69,20 +69,28 @@ else if ($method == 'POST') {
 
 else if ($method == 'DELETE') {
     if (isset($_GET['all']) && $_GET['all'] == 'true') {
-        $query = "TRUNCATE TABLE prediction_history";
+        // Explicitly delete linked data first to be safe
+        $conn->query("DELETE FROM lstm_weights");
+        $query = "DELETE FROM prediction_history";
         $stmt = $conn->prepare($query);
         if ($stmt->execute()) {
-            echo json_encode(["status" => "success", "message" => "All history cleared."]);
+            echo json_encode(["status" => "success", "message" => "All history and linked weights cleared."]);
         } else {
             http_response_code(500);
             echo json_encode(["status" => "error", "message" => "Failed to clear history."]);
         }
     } else if (isset($_GET['id'])) {
+        // Explicitly delete linked data for this specific ID first
+        $wQuery = "DELETE FROM lstm_weights WHERE history_id = :id";
+        $wStmt = $conn->prepare($wQuery);
+        $wStmt->bindParam(':id', $_GET['id']);
+        $wStmt->execute();
+
         $query = "DELETE FROM prediction_history WHERE id = :id";
         $stmt = $conn->prepare($query);
         $stmt->bindParam(':id', $_GET['id']);
         if ($stmt->execute()) {
-            echo json_encode(["status" => "success", "message" => "Record deleted."]);
+            echo json_encode(["status" => "success", "message" => "Record and its weights deleted."]);
         } else {
             http_response_code(500);
             echo json_encode(["status" => "error", "message" => "Failed to delete record."]);

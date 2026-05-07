@@ -1,91 +1,65 @@
-# ✈️ SkyPredict: Sistem Prediksi Penjualan Tiket Pesawat (LSTM)
+# 🏢 SWA Predict: Sistem Analitik PT. Swabina Gatra (LSTM)
 
-Sistem analitik cerdas berbasis web untuk memprediksi tren penjualan tiket pesawat menggunakan algoritma **Long Short-Term Memory (LSTM)**. Dibangun dengan fokus pada akurasi prediksi, visualisasi data yang interaktif, dan kemudahan operasional.
+[![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactjs.org/)
+[![TensorFlow.js](https://img.shields.io/badge/TensorFlow.js-FF6F00?style=for-the-badge&logo=tensorflow&logoColor=white)](https://www.tensorflow.org/js)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
+[![MySQL](https://img.shields.io/badge/MySQL-00000F?style=for-the-badge&logo=mysql&logoColor=white)](https://www.mysql.com/)
 
----
-
-## 🌟 Fitur Utama
-
-- **Dashboard Interaktif**: Visualisasi statistik penjualan total, rata-rata, dan tren mingguan menggunakan grafik area yang dinamis.
-- **Manajemen Data (CRUD)**: Kelola data historis penjualan tiket dengan fitur input manual, edit, hapus, dan import data dari file CSV.
-- **Proses Prediksi LSTM**:
-  - Konfigurasi parameter (Epochs, Learning Rate, Window Size).
-  - Visualisasi proses pelatihan (*Loss Convergence Curve*) secara real-time.
-  - Ekstraksi detail teknis (Weights & Bias) untuk transparansi model.
-- **Laporan Resmi**:
-  - Generate laporan cetak format A4 dengan Kop Surat resmi perusahaan.
-  - Ekspor hasil prediksi ke format **PDF** dan **Excel**.
-  - Riwayat prediksi tersimpan secara otomatis di database.
-- **Mode Tangguh (Offline Fallback)**: Sistem tetap dapat berjalan menggunakan data simulasi (Dummy Data) jika koneksi database MySQL terputus.
+Sistem analitik cerdas berbasis web untuk memprediksi tren bisnis (penjualan/distribusi) di **PT. Swabina Gatra** menggunakan algoritma **Long Short-Term Memory (LSTM)**. Dibangun dengan fokus pada akurasi prediksi, visualisasi data yang interaktif, dan transparansi model (Explainable AI).
 
 ---
 
-## 🛠️ Teknologi yang Digunakan
+## 🌟 Fitur Unggulan
 
-### Frontend
-- **React.js (Vite)**: Framework utama untuk antarmuka yang responsif.
-- **Tailwind CSS**: Desain modern dengan tema *Glassmorphism*.
-- **TensorFlow.js**: Menjalankan model Machine Learning (LSTM) langsung di browser.
-- **Framer Motion**: Animasi transisi yang halus dan premium.
-- **Recharts**: Library grafik interaktif untuk visualisasi data.
+### 1. 🧠 Mesin Prediksi LSTM Deep Learning
+*   **Multivariate Input**: Menggunakan 4 fitur input untuk setiap baris data (Actual, MA3, MA4, EMA).
+*   **Dynamic Configuration**: Atur *Epochs*, *Learning Rate*, dan *Window Size* secara fleksibel.
+*   **Real-time Training**: Lihat kurva konvergensi kerugian (*Loss Curve*) saat model belajar.
 
-### Backend & Database
-- **PHP 8.x**: API service untuk manajemen data dan autentikasi.
-- **MySQL**: Penyimpanan data user, penjualan, dan riwayat prediksi.
-- **Axios**: Komunikasi data antara frontend dan backend.
+### 2. 🔍 Transparansi Model (Explainable AI)
+*   **Weight Slicing 2x5**: Visualisasi sampel bobot dari 5 komponen internal LSTM (Input, Forget, Candidate, Output, Bias).
+*   **Persistent Weights**: Bobot model setiap sesi latihan disimpan secara permanen di database MySQL.
 
----
-
-## 🚀 Cara Instalasi
-
-### 1. Prasyarat
-- **XAMPP** (PHP & MySQL).
-- **Node.js** (LTS version).
-
-### 2. Setup Database
-1. Buka **phpMyAdmin**.
-2. Buat database baru dengan nama `prediksi_lstm`.
-3. Import file `database.sql` yang tersedia di folder root project.
-
-### 3. Setup Backend (PHP)
-1. Letakkan folder project di dalam direktori `C:\xampp\htdocs\`.
-2. Pastikan file `api/config/db.php` sudah sesuai dengan kredensial database Anda.
-
-### 4. Setup Frontend (React)
-1. Buka terminal di dalam folder project.
-2. Instal dependensi:
-   ```bash
-   npm install
-   ```
-3. Jalankan server pengembangan:
-   ```bash
-   npm run dev
-   ```
-4. Akses aplikasi melalui browser di `http://localhost:5173`.
+### 3. 📄 Pelaporan Resmi PT. Swabina Gatra
+*   **Official Document Format**: Cetak laporan dalam format surat resmi dengan Kop Surat PT. Swabina Gatra (Gresik).
+*   **Custom Print Margins**: Atur margin (Atas, Bawah, Kiri, Kanan) secara kustom sebelum mencetak.
+*   **PDF Export**: Dukungan ekspor dokumen PDF berkualitas tinggi yang siap audit.
 
 ---
 
-## 📁 Struktur Folder
+## 🛠️ Arsitektur Teknologi
 
-```text
-prediksi-lstm/
-├── api/                # Backend PHP (API & Config)
-├── src/
-│   ├── components/     # Komponen UI (Layout, Sidebar, dll)
-│   ├── pages/          # Halaman Utama (Dashboard, Prediksi, Laporan)
-│   ├── services/       # Logika Bisnis (API, LSTM Engine, Dummy Data)
-│   └── App.jsx         # Konfigurasi Routing
-├── database.sql        # Skema Database MySQL
-└── README.md           # Dokumentasi Project
+### Frontend (Modern Stack)
+*   **Vite + React.js**: Performa pengembangan yang sangat cepat.
+*   **TensorFlow.js**: Pemrosesan neural network di sisi client.
+*   **Recharts**: Visualisasi grafik line dan area yang interaktif.
+*   **Framer Motion**: Animasi UI premium.
+
+### Backend (Robust API)
+*   **PHP 8.x (PDO)**: Keamanan database dengan prepared statements.
+*   **MySQL Relational**: Struktur database yang dioptimalkan.
+
+---
+
+## 🚀 Panduan Instalasi
+
+### 1. Konfigurasi Database
+1.  Aktifkan **MySQL** di XAMPP/WAMP.
+2.  Buka `phpMyAdmin` dan buat database `prediksi_lstm`.
+3.  Import file `database.sql` ke database tersebut.
+
+### 2. Konfigurasi Backend
+1.  Salin folder project ke direktori web server (misal: `htdocs`).
+2.  Cek file `api/config/db.php` untuk memastikan kredensial database sudah benar.
+
+### 3. Jalankan Aplikasi
+```bash
+npm install
+npm run dev
 ```
+Akses di: `http://localhost:5173`
 
 ---
 
-## 📝 Catatan Penggunaan
-- Gunakan **Window Size** yang sesuai dengan pola musiman data Anda (disarankan 4-12 minggu).
-- Semakin tinggi **Epochs**, model akan semakin presisi namun membutuhkan waktu pemrosesan lebih lama tergantung spesifikasi perangkat.
-- Laporan PDF dirancang untuk ukuran kertas **A4** dengan margin standar dokumen resmi.
+*Dikembangkan untuk memberikan solusi cerdas dalam perencanaan operasional PT. Swabina Gatra.*
 
----
-
-*Sistem ini dirancang untuk membantu pengambilan keputusan strategis berbasis data.*

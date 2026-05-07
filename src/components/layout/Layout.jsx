@@ -48,7 +48,7 @@ const Layout = ({ user, setUser }) => {
           >
             <PlaneTakeoff size={24} />
           </motion.div>
-          <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent">SkyPredict</h1>
+          <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent">SWA Predict</h1>
         </div>
         
         <div className="px-6 py-4 border-b border-gray-700/50">

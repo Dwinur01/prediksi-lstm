@@ -63,11 +63,11 @@ const Report = () => {
         
         {/* Text Section */}
         <div className="flex-1 text-center pr-[120px]">
-          <h1 className="text-[26px] font-bold text-black uppercase leading-tight tracking-tight">PT. MASKAPAI UDARA NUSANTARA</h1>
-          <p className="text-[16px] font-bold text-black mt-1 uppercase tracking-[0.15em] border-t border-black/20 pt-1 inline-block">Divisi Operasional & Perencanaan Data</p>
+          <h1 className="text-[26px] font-bold text-black uppercase leading-tight tracking-tight">PT. SWABINA GATRA</h1>
+          <p className="text-[16px] font-bold text-black mt-1 uppercase tracking-[0.15em] border-t border-black/20 pt-1 inline-block">Divisi Perencanaan & Pengembangan Bisnis</p>
           <div className="mt-3 text-[11px] text-black/80 font-medium leading-relaxed font-sans">
-            <p>Gedung SkyCenter Lt. 12, Jl. Penerbangan No. 45, Jakarta Pusat 10110</p>
-            <p>Telepon: (021) 1234-5678 | Situs: www.maskapaiudara.id | Email: info@maskapaiudara.id</p>
+            <p>Jl. RA Kartini No. 21A, Injen Timur, Sidomoro, Kec. Kebomas, Gresik 61122</p>
+            <p>Telepon: 0811-8890-580 | Situs: www.swabina.id | Email: info@swabina.id</p>
           </div>
         </div>
       </div>
@@ -240,7 +240,7 @@ const Report = () => {
                     <div className="space-y-1">
                       <div className="flex gap-4">
                         <span className="w-20 font-bold">Nomor</span>
-                        <span>: {selectedReport.id}/ML-LSTM/MUN/{new Date(selectedReport.run_date).getFullYear()}</span>
+                        <span>: {selectedReport.id}/SWA-LSTM/GRK/{new Date(selectedReport.run_date).getFullYear()}</span>
                       </div>
                       <div className="flex gap-4">
                         <span className="w-20 font-bold">Lampiran</span>
@@ -384,8 +384,8 @@ const Report = () => {
                     <div className="text-center">
                       <p className="text-[12px] mb-20">Jakarta, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
                       <div className="w-48 border-b border-black mx-auto"></div>
-                      <p className="text-[12px] font-bold mt-2 uppercase font-sans">Manajer Operasional</p>
-                      <p className="text-[10px] mt-1">NIP. 19920824 201503 1 002</p>
+                      <p className="text-[12px] font-bold mt-2 uppercase font-sans">Kepala Bidang Perencanaan</p>
+                      <p className="text-[10px] mt-1">Gresik, {new Date(selectedReport.run_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
                     </div>
                   </div>
                 </div>
