@@ -8,7 +8,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
     exit();
 }
 
-$host = 'localhost';
+$host = '127.0.0.1';
 $db_name = 'prediksi_lstm';
 $username = 'root';
 $password = '';

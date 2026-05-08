@@ -40,8 +40,21 @@ else if ($method == 'POST') {
         return $prefix . str_pad($newNum, 3, '0', STR_PAD_LEFT);
     }
     
+    // Check if batch delete
+    if (isset($data['delete_batch']) && is_array($data['delete_batch'])) {
+        try {
+            $placeholders = str_repeat('?,', count($data['delete_batch']) - 1) . '?';
+            $query = "DELETE FROM ticket_sales WHERE id IN ($placeholders)";
+            $stmt = $conn->prepare($query);
+            $stmt->execute($data['delete_batch']);
+            echo json_encode(["status" => "success", "message" => count($data['delete_batch']) . " records deleted."]);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(["status" => "error", "message" => "Delete failed: " . $e->getMessage()]);
+        }
+    }
     // Check if batch insert (array of objects)
-    if (isset($data['batch']) && is_array($data['batch'])) {
+    else if (isset($data['batch']) && is_array($data['batch'])) {
         $successCount = 0;
         
         $conn->beginTransaction();
@@ -82,26 +95,28 @@ else if ($method == 'POST') {
             echo json_encode(["status" => "error", "message" => "Import failed: " . $e->getMessage()]);
         }
     } else {
-        // Single insert
+        // Single insert or Update
         if (isset($data['week']) && isset($data['year']) && isset($data['tickets_sold'])) {
-            $newId = generateNextId($conn, $prefix);
+            // If ID is provided, use it (Update), otherwise generate new (Insert)
+            $id = (isset($data['id']) && !empty($data['id'])) ? $data['id'] : generateNextId($conn, $prefix);
             $sale_date = isset($data['sale_date']) ? $data['sale_date'] : null;
             
             $query = "INSERT INTO ticket_sales (id, sale_date, week, year, tickets_sold) VALUES (:id, :sdate, :week, :year, :tickets_sold)
-                      ON DUPLICATE KEY UPDATE tickets_sold = :tickets_sold, sale_date = :sdate";
+                      ON DUPLICATE KEY UPDATE tickets_sold = :tickets_sold, sale_date = :sdate, week = :week, year = :year";
             $stmt = $conn->prepare($query);
             
-            $stmt->bindParam(':id', $newId);
+            $stmt->bindParam(':id', $id);
             $stmt->bindParam(':sdate', $sale_date);
             $stmt->bindParam(':week', $data['week']);
             $stmt->bindParam(':year', $data['year']);
             $stmt->bindParam(':tickets_sold', $data['tickets_sold']);
             
             if ($stmt->execute()) {
-                echo json_encode(["status" => "success", "message" => "Record saved with ID: $newId"]);
+                $msg = (isset($data['id']) && !empty($data['id'])) ? "Record updated" : "Record saved with ID: $id";
+                echo json_encode(["status" => "success", "message" => $msg]);
             } else {
                 http_response_code(500);
-                echo json_encode(["status" => "error", "message" => "Failed to save record."]);
+                echo json_encode(["status" => "error", "message" => "Failed to process record."]);
             }
         } else {
             http_response_code(400);

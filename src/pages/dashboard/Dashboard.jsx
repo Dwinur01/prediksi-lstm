@@ -1,14 +1,44 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { SkeletonCard, SkeletonChart, SkeletonTable } from '../../components/common/Skeleton';
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer 
+  AreaChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer 
 } from 'recharts';
-import { TrendingUp, Calendar, AlertCircle, Database, Search, BarChart3, ArrowRight, BrainCircuit } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { 
+  TrendingUp, Calendar, AlertCircle, Database, Search, 
+  BarChart3, ArrowRight, BrainCircuit, Activity, ShieldCheck, Zap 
+} from 'lucide-react';
+import { motion, useMotionValue, useTransform } from 'framer-motion';
 import api from '../../services/api';
 import { getDummyTickets } from '../../services/dummy';
 import toast from 'react-hot-toast';
 
+const AnimatedNumber = ({ value }) => {
+  const [displayValue, setDisplayValue] = useState(0);
+  
+  useEffect(() => {
+    let start = 0;
+    const end = parseInt(value);
+    if (start === end) return;
+    
+    let totalDuration = 1500;
+    let increment = end / (totalDuration / 16);
+    
+    let timer = setInterval(() => {
+      start += increment;
+      if (start >= end) {
+        setDisplayValue(end);
+        clearInterval(timer);
+      } else {
+        setDisplayValue(Math.floor(start));
+      }
+    }, 16);
+    
+    return () => clearInterval(timer);
+  }, [value]);
+
+  return <span>{displayValue.toLocaleString()}</span>;
+};
 const Dashboard = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,6 +47,7 @@ const Dashboard = () => {
   const [latestForecast, setLatestForecast] = useState(null);
   const [auditAlerts, setAuditAlerts] = useState(null);
   const [lastRunDate, setLastRunDate] = useState(null);
+  const [historyResults, setHistoryResults] = useState(null);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -25,32 +56,41 @@ const Dashboard = () => {
   }, []);
 
   const fetchData = async () => {
+    setLoading(true);
     try {
+      // 1. Fetch sales data
       const response = await api.get('/data/tickets.php');
       if (response.data.status === 'success') {
         processFetchedData(response.data.data);
       }
-      
-      // Fetch latest forecast (Poin 3)
+
+      // 2. Fetch latest prediction history
       const histResponse = await api.get('/data/predictions.php');
-      if (histResponse.data.status === 'success') {
-        if (histResponse.data.data.length > 0) {
-          const latest = histResponse.data.data[0]; // Already sorted by date DESC
-          setLastRunDate(latest.run_date);
-          const results = JSON.parse(latest.results_json);
-          if (results.forecast && results.forecast.length > 0) {
+      if (histResponse.data.status === 'success' && histResponse.data.data.length > 0) {
+        const latest = histResponse.data.data[0];
+        setLastRunDate(latest.run_date);
+        
+        try {
+          const results = typeof latest.results_json === 'string' 
+            ? JSON.parse(latest.results_json) 
+            : latest.results_json;
+            
+          setHistoryResults(results);
+          if (results && results.forecast && results.forecast.length > 0) {
             setLatestForecast(results.forecast[0].value);
           }
-          if (results.audit && results.audit.status === 'warning') {
+          if (results && results.audit && results.audit.status === 'warning') {
             setAuditAlerts(results.audit.issues);
           }
-        } else {
-          setLastRunDate(null);
-          setLatestForecast(null);
-          setAuditAlerts(null);
+        } catch (parseError) {
+          console.error('Failed to parse history JSON:', parseError);
         }
       } else {
-        throw new Error('Network error');
+        // Reset history states if no history found
+        setLastRunDate(null);
+        setLatestForecast(null);
+        setAuditAlerts(null);
+        setHistoryResults(null);
       }
     } catch (error) {
       console.warn('API Error, using dummy data:', error);
@@ -62,10 +102,11 @@ const Dashboard = () => {
   };
 
   const processFetchedData = (rawData) => {
+    // Keep all fields for the table, add derived 'name' for the chart
     const fetchedData = rawData.map(item => ({
+      ...item,
       name: `W${item.week} ${item.year}`,
-      tickets_sold: parseInt(item.tickets_sold),
-      created_at: item.created_at
+      tickets_sold: parseInt(item.tickets_sold) || 0
     }));
     setData(fetchedData);
     
@@ -74,13 +115,28 @@ const Dashboard = () => {
     const avg = fetchedData.length > 0 ? Math.round(total / fetchedData.length) : 0;
     const latest = fetchedData.length > 0 ? fetchedData[fetchedData.length - 1].tickets_sold : 0;
     
-    setStats({ total, avg, latest });
+    // Calculate Data Health Score
+    let health = 0;
+    if (fetchedData.length >= 20) health += 40;
+    else health += (fetchedData.length / 20) * 40;
+    
+    const gaps = fetchedData.filter((d, i) => i > 0 && (new Date(d.sale_date) - new Date(fetchedData[i-1].sale_date)) > 86400000 * 8).length;
+    health += Math.max(0, 40 - (gaps * 5));
+    
+    const variance = new Set(fetchedData.map(d => d.tickets_sold)).size;
+    health += Math.min(20, variance * 2);
+    
+    setStats({ total, avg, latest, health: Math.round(health) });
   };
 
-  const filteredData = data.filter(item => 
-    item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    item.tickets_sold.toString().includes(searchTerm)
-  );
+  const filteredData = data.filter(item => {
+    const s = searchTerm.toLowerCase();
+    return (
+      item.id?.toLowerCase().includes(s) || 
+      item.name.toLowerCase().includes(s) || 
+      item.tickets_sold.toString().includes(s)
+    );
+  });
 
   const displayedData = rowsPerPage === 'all' 
     ? filteredData 
@@ -98,28 +154,40 @@ const Dashboard = () => {
     visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 100 } }
   };
 
-  const StatCard = ({ title, value, icon: Icon, colorClass, delay = 0 }) => (
-    <motion.div 
-      variants={itemVariants}
-      whileHover={{ y: -5, scale: 1.02, transition: { duration: 0.2 } }}
-      whileTap={{ scale: 0.98 }}
-      className={`${colorClass} rounded-2xl p-6 text-white relative overflow-hidden group cursor-pointer`}
-    >
-      <div className="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-125 group-hover:-rotate-12 transition-transform duration-500">
-        <Icon size={120} />
-      </div>
-      <div className="relative z-10">
-        <motion.div 
-          whileHover={{ rotate: 15 }}
-          className="p-3 bg-white/20 w-fit rounded-xl mb-4 transition-transform shadow-lg"
-        >
-          <Icon size={24} />
-        </motion.div>
-        <p className="text-white/70 text-sm font-medium uppercase tracking-wider">{title}</p>
-        <h3 className="text-3xl font-bold mt-1 tabular-nums drop-shadow-md">{value}</h3>
-      </div>
-    </motion.div>
-  );
+  const StatCard = ({ title, value, icon: Icon, colorClass }) => {
+    const x = useMotionValue(0);
+    const y = useMotionValue(0);
+    const rotateX = useTransform(y, [-100, 100], [10, -10]);
+    const rotateY = useTransform(x, [-100, 100], [-10, 10]);
+
+    return (
+      <motion.div 
+        style={{ perspective: 1000, rotateX, rotateY }}
+        onMouseMove={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          x.set(e.clientX - rect.left - rect.width / 2);
+          y.set(e.clientY - rect.top - rect.height / 2);
+        }}
+        onMouseLeave={() => { x.set(0); y.set(0); }}
+        variants={itemVariants}
+        whileHover={{ y: -5, scale: 1.02 }}
+        className={`${colorClass} rounded-3xl p-8 text-white relative overflow-hidden group cursor-pointer shadow-2xl transition-shadow`}
+      >
+        <div className="absolute -right-6 -bottom-6 opacity-10 group-hover:scale-110 group-hover:-rotate-12 transition-all duration-700">
+          <Icon size={140} />
+        </div>
+        <div className="relative z-10">
+          <div className="p-3 bg-white/20 w-fit rounded-2xl mb-6 shadow-xl">
+            <Icon size={28} />
+          </div>
+          <p className="text-white/70 text-xs font-black uppercase tracking-[0.2em] mb-1">{title}</p>
+          <h3 className="text-4xl font-black tabular-nums">
+            <AnimatedNumber value={value} />
+          </h3>
+        </div>
+      </motion.div>
+    );
+  };
 
   return (
     <motion.div 
@@ -143,24 +211,34 @@ const Dashboard = () => {
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard 
-          title="Total Tiket Terjual" 
-          value={stats.total.toLocaleString()} 
-          icon={TrendingUp} 
-          colorClass="bg-gradient-to-br from-primary to-blue-700 shadow-lg shadow-primary/20"
-        />
-        <StatCard 
-          title="Rata-rata Mingguan" 
-          value={stats.avg.toLocaleString()} 
-          icon={Calendar} 
-          colorClass="bg-gradient-to-br from-purple-500 to-purple-700 shadow-lg shadow-purple/20"
-        />
-        <StatCard 
-          title="Data Terbaru" 
-          value={stats.latest.toLocaleString()} 
-          icon={AlertCircle} 
-          colorClass="bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 shadow-xl"
-        />
+        {loading ? (
+          <>
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </>
+        ) : (
+          <>
+            <StatCard 
+              title="Total Tiket Terjual" 
+              value={stats.total} 
+              icon={TrendingUp} 
+              colorClass="bg-gradient-to-br from-primary to-blue-700 shadow-lg shadow-primary/20"
+            />
+            <StatCard 
+              title="Rata-rata Mingguan" 
+              value={stats.avg} 
+              icon={Calendar} 
+              colorClass="bg-gradient-to-br from-purple-500 to-purple-700 shadow-lg shadow-purple/20"
+            />
+            <StatCard 
+              title="Data Terbaru" 
+              value={stats.latest} 
+              icon={AlertCircle} 
+              colorClass="bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 shadow-xl"
+            />
+          </>
+        )}
       </div>
 
       {/* Feature 3: Dashboard Audit Alerts */}
@@ -200,26 +278,66 @@ const Dashboard = () => {
               </motion.div>
               Tren Penjualan Tiket
             </h3>
-            <div className="text-xs text-gray-400 flex items-center gap-4">
-              <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-primary shadow-[0_0_5px_rgba(59,130,246,0.8)]"></span> Tiket Terjual</div>
+            <div className="text-xs text-gray-400 flex flex-wrap items-center gap-x-4 gap-y-2">
+              <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-gray-500"></span> Aktual</div>
+              <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_5px_rgba(245,158,11,0.5)]"></span> MA3</div>
+              <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-primary shadow-[0_0_5px_rgba(59,130,246,0.8)]"></span> Prediksi</div>
+              <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]"></span> Proyeksi</div>
             </div>
           </div>
           
           <div className="h-[320px] w-full relative">
             {loading ? (
-              <div className="h-full flex items-center justify-center">
-                <div className="relative">
-                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
-                  <div className="absolute inset-0 rounded-full border-4 border-primary/20"></div>
-                </div>
-              </div>
+              <SkeletonChart />
             ) : data.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data}>
+                <AreaChart data={[
+                  ...data.map((item, i) => {
+                    // Coba cari data prediksi yang cocok dengan periode ini
+                    let predVal = null;
+                    let maVal = null;
+                    
+                    if (historyResults) {
+                      const dateIdx = historyResults.dates?.indexOf(item.name);
+                      if (dateIdx !== -1 && dateIdx !== undefined) {
+                        predVal = parseFloat(historyResults.predictions[dateIdx]) || 0;
+                      }
+                      
+                      // Cari MA3 dari normalized data
+                      const normItem = historyResults.normalized?.find(n => n.date === item.name);
+                      if (normItem) {
+                        const min = parseFloat(historyResults.min) || 0;
+                        const max = parseFloat(historyResults.max) || 1;
+                        maVal = Math.round((parseFloat(normItem.ma3) || 0) * (max - min) + min);
+                      }
+                    }
+
+                    return {
+                      ...item,
+                      Actual: item.tickets_sold,
+                      Prediction: predVal,
+                      Baseline: maVal,
+                      // Titik terakhir prediksi disambungkan ke awal proyeksi
+                      Projection: (i === data.length - 1 && predVal) ? predVal : null
+                    };
+                  }),
+                  ...(historyResults?.forecast || []).map(f => ({
+                    name: `Next W${f.weekOffset}`,
+                    Projection: f.value
+                  }))
+                ]}>
                   <defs>
                     <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#64748b" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#64748b" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorPred" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
                       <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorProj" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
@@ -240,17 +358,41 @@ const Dashboard = () => {
                   />
                   <RechartsTooltip 
                     contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', backdropFilter: 'blur(8px)', border: '1px solid rgba(51, 65, 85, 0.5)', borderRadius: '12px', fontSize: '12px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}
-                    itemStyle={{ color: '#3b82f6', fontWeight: 'bold' }}
+                    itemStyle={{ fontSize: '11px', fontWeight: 'bold' }}
                     cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }}
                   />
                   <Area 
                     type="monotone" 
-                    dataKey="tickets_sold" 
+                    dataKey="Actual" 
+                    stroke="#64748b" 
+                    strokeWidth={2}
+                    fillOpacity={1} 
+                    fill="url(#colorSales)" 
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="Baseline" 
+                    stroke="#f59e0b" 
+                    strokeWidth={1.5}
+                    strokeDasharray="4 4"
+                    fill="transparent" 
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="Prediction" 
                     stroke="#3b82f6" 
                     strokeWidth={3}
                     fillOpacity={1} 
-                    fill="url(#colorSales)" 
+                    fill="url(#colorPred)" 
                     animationDuration={2000}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="Projection" 
+                    stroke="#10b981" 
+                    strokeWidth={3}
+                    fillOpacity={1} 
+                    fill="url(#colorProj)" 
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -347,6 +489,47 @@ const Dashboard = () => {
           </motion.div>
         </motion.div>
       </div>
+      
+      {/* Feature 1: Sales Heatmap */}
+      <motion.div variants={itemVariants} className="glass-panel p-6 shadow-xl">
+        <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
+          <Activity size={20} className="text-emerald-500" /> Heatmap Intensitas Penjualan
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {data.slice(-52).map((item, i) => {
+            // Determine intensity color based on value vs average
+            const intensity = item.tickets_sold / (stats.avg * 1.5);
+            const opacity = Math.min(1, Math.max(0.1, intensity));
+            
+            return (
+              <div 
+                key={i}
+                className="group relative"
+              >
+                <div 
+                  className="w-6 h-6 rounded-md transition-all duration-500 hover:scale-125 hover:z-10 cursor-pointer"
+                  style={{ 
+                    backgroundColor: `rgba(16, 185, 129, ${opacity})`,
+                    boxShadow: opacity > 0.7 ? '0 0 10px rgba(16, 185, 129, 0.3)' : 'none'
+                  }}
+                />
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-[10px] text-white rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none transition-opacity border border-white/10 z-50">
+                  {item.name}: {item.tickets_sold.toLocaleString()} Tiket
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-4 flex items-center gap-4 text-[10px] text-gray-500">
+          <span>Rendah</span>
+          <div className="flex gap-1">
+            {[0.1, 0.3, 0.5, 0.7, 0.9].map(o => (
+              <div key={o} className="w-3 h-3 rounded-sm" style={{ backgroundColor: `rgba(16, 185, 129, ${o})` }} />
+            ))}
+          </div>
+          <span>Tinggi</span>
+        </div>
+      </motion.div>
 
       <motion.div 
         variants={itemVariants}
@@ -396,52 +579,60 @@ const Dashboard = () => {
           </div>
         </div>
         
-        <div className="overflow-x-auto rounded-xl border border-gray-700/50 max-h-80 overflow-y-auto custom-scrollbar bg-gray-900/20">
-          <table className="w-full text-sm text-left text-gray-400">
-            <thead className="text-xs text-gray-300 uppercase bg-gray-800/90 sticky top-0 z-10 backdrop-blur-md shadow-sm">
-              <tr>
-                <th className="px-4 py-4">No</th>
-                <th className="px-4 py-4">Periode</th>
-                <th className="px-4 py-4">Waktu Input</th>
-                <th className="px-4 py-4 text-right">Jumlah Terjual</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800/50">
-              {displayedData.map((item, index) => (
-                <motion.tr 
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  whileHover={{ backgroundColor: 'rgba(55, 65, 81, 0.5)', scale: 1.01, zIndex: 10, position: 'relative' }}
-                  key={index} 
-                  className="hover:bg-gray-800/40 transition-all duration-200 group origin-left cursor-default"
-                >
-                  <td className="px-4 py-3 text-gray-500 group-hover:text-gray-300 transition-colors">{(currentPage - 1) * (rowsPerPage === 'all' ? 0 : rowsPerPage) + index + 1}</td>
-                  <td className="px-4 py-3 font-medium text-gray-200 group-hover:text-primary transition-colors">{item.name}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500 italic">
-                    {item.created_at ? new Date(item.created_at).toLocaleString('id-ID', { 
-                      day: '2-digit', 
-                      month: 'short', 
-                      year: 'numeric', 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
-                    }) : '-'}
-                  </td>
-                  <td className="px-4 py-3 text-right text-accent font-bold group-hover:text-white transition-colors">
-                    {item.tickets_sold.toLocaleString()}
-                  </td>
-                </motion.tr>
-              ))}
-              {displayedData.length === 0 && (
+        {loading ? (
+          <SkeletonTable />
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-gray-700/50 max-h-80 overflow-y-auto custom-scrollbar bg-gray-900/20">
+            <table className="w-full text-sm text-left text-gray-400">
+              <thead className="text-xs text-gray-300 uppercase bg-gray-800/90 sticky top-0 z-10 backdrop-blur-md shadow-sm">
                 <tr>
-                  <td colSpan="4" className="px-4 py-12 text-center text-gray-600 italic">
-                    Data tidak ditemukan.
-                  </td>
+                  <th className="px-4 py-4 border-r border-gray-700/50">No</th>
+                  <th className="px-4 py-4 border-r border-gray-700/50">ID Transaksi</th>
+                  <th className="px-4 py-4 border-r border-gray-700/50">Tanggal (Y-M-D)</th>
+                  <th className="px-4 py-4 border-r border-gray-700/50">Mgg/Thn</th>
+                  <th className="px-4 py-4 border-r border-gray-700/50 text-right">Jumlah Terjual</th>
+                  <th className="px-4 py-4 text-center">Waktu Input</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-800/50">
+                {displayedData.map((item, index) => (
+                  <motion.tr 
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    whileHover={{ backgroundColor: 'rgba(55, 65, 81, 0.5)', scale: 1.01, zIndex: 10, position: 'relative' }}
+                    key={index} 
+                    className="hover:bg-gray-800/40 transition-all duration-200 group origin-left cursor-default border-b border-gray-800/50"
+                  >
+                    <td className="px-4 py-3 border-r border-gray-700/30 text-gray-500 group-hover:text-gray-300 transition-colors">{(currentPage - 1) * (rowsPerPage === 'all' ? 0 : rowsPerPage) + index + 1}</td>
+                    <td className="px-4 py-3 border-r border-gray-700/30 font-medium text-gray-400 group-hover:text-white transition-colors">{item.id}</td>
+                    <td className="px-4 py-3 border-r border-gray-700/30 text-accent font-bold group-hover:text-white transition-colors">{item.sale_date}</td>
+                    <td className="px-4 py-3 border-r border-gray-700/30 text-xs text-gray-500 group-hover:text-gray-300 transition-colors">M{item.week} / {item.year}</td>
+                    <td className="px-4 py-3 border-r border-gray-700/30 text-right text-accent font-bold group-hover:text-white transition-colors">
+                      {item.tickets_sold.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-center text-xs text-gray-500 italic">
+                      {item.created_at ? new Date(item.created_at).toLocaleString('id-ID', { 
+                        day: '2-digit', 
+                        month: 'short', 
+                        year: 'numeric', 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                      }) : '-'}
+                    </td>
+                  </motion.tr>
+                ))}
+                {displayedData.length === 0 && (
+                  <tr>
+                    <td colSpan="4" className="px-4 py-12 text-center text-gray-600 italic">
+                      Data tidak ditemukan.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {rowsPerPage !== 'all' && totalPages > 1 && (
           <div className="flex items-center justify-center gap-2 mt-4">

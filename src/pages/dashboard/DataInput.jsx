@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import Papa from 'papaparse';
-import { Upload, Plus, Trash2, Edit2, AlertTriangle, FileSpreadsheet, Download, Search, X } from 'lucide-react';
+import { Upload, Plus, Trash2, Edit2, AlertTriangle, FileSpreadsheet, Download, Search, X, Database } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../services/api';
 import { getDummyTickets } from '../../services/dummy';
 
@@ -14,6 +14,10 @@ const DataInput = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [showModal, setShowModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState({ show: false, title: '', message: '', onConfirm: null, type: 'danger' });
+  const [selectedIds, setSelectedIds] = useState([]);
 
   useEffect(() => {
     fetchData();
@@ -37,12 +41,16 @@ const DataInput = () => {
     }
   };
 
-  const filteredData = data.filter(item => 
-    item.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    item.week.toString().includes(searchTerm) ||
-    item.year.toString().includes(searchTerm) ||
-    item.tickets_sold.toString().includes(searchTerm)
-  );
+  const filteredData = data.filter(item => {
+    const s = searchTerm.toLowerCase();
+    return (
+      item.id.toLowerCase().includes(s) || 
+      (item.sale_date && item.sale_date.toLowerCase().includes(s)) ||
+      item.tickets_sold.toString().includes(s) ||
+      item.week.toString().includes(s) ||
+      item.year.toString().includes(s)
+    );
+  });
 
   const displayedData = rowsPerPage === 'all' 
     ? filteredData 
@@ -51,18 +59,28 @@ const DataInput = () => {
   const totalPages = rowsPerPage === 'all' ? 1 : Math.ceil(filteredData.length / rowsPerPage);
 
   const handleManualSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await api.post('/data/tickets.php', formData);
-      if (response.data.status === 'success') {
-        toast.success(isEditing ? 'Data berhasil diperbarui' : 'Data berhasil disimpan');
-        setFormData({ id: '', week: '', year: '', tickets_sold: '' });
-        setIsEditing(false);
-        fetchData();
+    if (e) e.preventDefault();
+    
+    setConfirmConfig({
+      show: true,
+      title: isEditing ? 'Konfirmasi Edit' : 'Konfirmasi Simpan',
+      message: `Apakah Anda yakin ingin ${isEditing ? 'memperbarui' : 'menyimpan'} data ini?`,
+      type: 'primary',
+      onConfirm: async () => {
+        try {
+          const response = await api.post('/data/tickets.php', formData);
+          if (response.data.status === 'success') {
+            toast.success(isEditing ? 'Data berhasil diperbarui' : 'Data berhasil disimpan');
+            setFormData({ id: '', sale_date: '', week: '', year: '', tickets_sold: '' });
+            setIsEditing(false);
+            setShowModal(false);
+            fetchData();
+          }
+        } catch (error) {
+          toast.error('Gagal memproses data.');
+        }
       }
-    } catch (error) {
-      toast.error('Gagal memproses data.');
-    }
+    });
   };
 
   const handleEdit = (item) => {
@@ -74,26 +92,13 @@ const DataInput = () => {
       tickets_sold: item.tickets_sold
     });
     setIsEditing(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setShowModal(true);
   };
 
   const cancelEdit = () => {
-    setFormData({ id: '', week: '', year: '', tickets_sold: '' });
+    setFormData({ id: '', sale_date: '', week: '', year: '', tickets_sold: '' });
     setIsEditing(false);
-  };
-
-  const handleDelete = async (id) => {
-    if (window.confirm('Yakin ingin menghapus data ini?')) {
-      try {
-        const response = await api.delete(`/data/tickets.php?id=${id}`);
-        if (response.data.status === 'success') {
-          toast.success('Data dihapus');
-          fetchData();
-        }
-      } catch (error) {
-        toast.error('Gagal menghapus data.');
-      }
-    }
+    setShowModal(false);
   };
 
   const handleFileUpload = (e) => {
@@ -110,49 +115,29 @@ const DataInput = () => {
       header: true,
       skipEmptyLines: true,
       complete: async (results) => {
-        // Validate and transform data
         const batchData = results.data.map(row => {
           const rawDate = row['Tanggal'] || row['Date'] || row['tanggal'] || row['date'];
           const rawAmount = row['Jumlah'] || row['Terjual'] || row['tickets_sold'] || row['amount'];
-          
           if (!rawDate || !rawAmount) return null;
-
-          // Robust date parsing
           let dateObj = new Date(rawDate);
-          
-          // Handle DD/MM/YYYY or DD-MM-YYYY formats if native parsing fails
           if (isNaN(dateObj.getTime())) {
             const parts = rawDate.split(/[-/]/);
             if (parts.length === 3) {
-              if (parts[0].length === 4) { // YYYY-MM-DD
-                dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
-              } else if (parts[2].length === 4) { // DD-MM-YYYY
-                dateObj = new Date(parts[2], parts[1] - 1, parts[0]);
-              }
+              if (parts[0].length === 4) dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+              else if (parts[2].length === 4) dateObj = new Date(parts[2], parts[1] - 1, parts[0]);
             }
           }
-
           const tickets_sold = parseInt(rawAmount.toString().replace(/[^0-9]/g, ''));
-
           if (!dateObj || isNaN(dateObj.getTime())) return null;
-
           const year = dateObj.getFullYear();
           const firstDayOfYear = new Date(year, 0, 1);
           const pastDaysOfYear = (dateObj - firstDayOfYear) / 86400000;
           const week = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
-
-          return { 
-            sale_date: dateObj.getFullYear() + '-' + 
-                      String(dateObj.getMonth() + 1).padStart(2, '0') + '-' + 
-                      String(dateObj.getDate()).padStart(2, '0'), 
-            week, 
-            year, 
-            tickets_sold 
-          };
+          return { sale_date: dateObj.toISOString().split('T')[0], week, year, tickets_sold };
         }).filter(item => item !== null && !isNaN(item.tickets_sold));
 
         if (batchData.length === 0) {
-          toast.error('Format CSV tidak sesuai. Pastikan ada kolom Tanggal dan Jumlah.');
+          toast.error('Format CSV tidak sesuai.');
           setLoading(false);
           return;
         }
@@ -167,7 +152,8 @@ const DataInput = () => {
           toast.error('Gagal mengimpor data batch.');
         } finally {
           setLoading(false);
-          e.target.value = null; // reset file input
+          e.target.value = null;
+          setShowImportModal(false);
         }
       },
       error: (error) => {
@@ -177,18 +163,91 @@ const DataInput = () => {
     });
   };
 
-  const handleDeleteAll = async () => {
-    if (window.confirm('PERINGATAN: Apakah Anda yakin ingin menghapus SEMUA data penjualan?')) {
-      try {
-        const response = await api.delete('/data/tickets.php?all=true');
-        if (response.data.status === 'success') {
-          toast.success('Semua data berhasil dihapus.');
-          fetchData();
+  const handleDelete = async (id) => {
+    setConfirmConfig({
+      show: true,
+      title: 'Hapus Data',
+      message: 'Apakah Anda yakin ingin menghapus data ini secara permanen?',
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          const response = await api.delete(`/data/tickets.php?id=${id}`);
+          if (response.data.status === 'success') {
+            toast.success('Data berhasil dihapus');
+            fetchData();
+          }
+        } catch (error) {
+          toast.error('Gagal menghapus data.');
         }
-      } catch (error) {
-        toast.error('Gagal menghapus data.');
       }
+    });
+  };
+
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedIds(displayedData.map(item => item.id));
+    } else {
+      setSelectedIds([]);
     }
+  };
+
+  const handleSelectRow = (id) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    setConfirmConfig({
+      show: true,
+      title: 'Hapus Terpilih',
+      message: `Apakah Anda yakin ingin menghapus ${selectedIds.length} data yang dipilih?`,
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          const response = await api.post('/data/tickets.php', { delete_batch: selectedIds });
+          if (response.data.status === 'success') {
+            toast.success(`${selectedIds.length} data berhasil dihapus`);
+            setSelectedIds([]);
+            fetchData();
+          }
+        } catch (error) {
+          toast.error('Gagal menghapus data massal.');
+        }
+      }
+    });
+  };
+
+  const SkeletonRow = () => (
+    <tr className="animate-pulse">
+      <td className="px-4 py-4"><div className="h-4 bg-gray-800 rounded w-4"></div></td>
+      <td className="px-4 py-4"><div className="h-4 bg-gray-800 rounded w-16"></div></td>
+      <td className="px-4 py-4"><div className="h-4 bg-gray-800 rounded w-24"></div></td>
+      <td className="px-4 py-4"><div className="h-4 bg-gray-800 rounded w-12"></div></td>
+      <td className="px-4 py-4 text-right"><div className="h-4 bg-gray-800 rounded w-16 ml-auto"></div></td>
+      <td className="px-4 py-4 text-center"><div className="h-4 bg-gray-800 rounded w-20 mx-auto"></div></td>
+      <td className="px-4 py-4 text-center"><div className="h-4 bg-gray-800 rounded w-12 mx-auto"></div></td>
+    </tr>
+  );
+
+  const handleDeleteAll = async () => {
+    setConfirmConfig({
+      show: true,
+      title: 'Reset Database',
+      message: 'PERINGATAN KRITIKAL: Seluruh data penjualan akan dihapus permanen. Tindakan ini tidak dapat dibatalkan!',
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          const response = await api.delete('/data/tickets.php?all=true');
+          if (response.data.status === 'success') {
+            toast.success('Semua data berhasil dihapus.');
+            fetchData();
+          }
+        } catch (error) {
+          toast.error('Gagal menghapus data.');
+        }
+      }
+    });
   };
 
   const handleExportCSV = () => {
@@ -233,143 +292,261 @@ const DataInput = () => {
       animate="visible"
       className="space-y-6"
     >
-      <motion.div variants={itemVariants}>
-        <h1 className="text-2xl font-bold text-white mb-2">Manajemen Data Penjualan</h1>
-        <p className="text-gray-400">Input manual atau impor data penjualan mingguan dari CSV.</p>
-      </motion.div>
-
-      <motion.div variants={itemVariants} className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-4 shadow-lg shadow-blue-500/5">
-        <AlertTriangle className="text-blue-400 mt-1 flex-shrink-0" size={24} />
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h4 className="text-blue-400 font-medium">Panduan Import Data CSV</h4>
-          <p className="text-gray-300 text-sm mt-1">
-            Gunakan format file <strong>CSV</strong> (Comma Separated Values).
-            <br/>Kolom baris pertama (header) <strong>wajib</strong> bernama: <code>Tanggal, Jumlah</code>. (Format: YYYY-MM-DD).
-            <br/>Sistem akan otomatis menghitung <strong>Minggu</strong> dan <strong>Tahun</strong> dari tanggal tersebut.
-          </p>
-          <motion.a whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} href="/template_data.csv" download className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 rounded-lg text-xs font-medium transition-colors border border-blue-500/30">
-            <Download size={14} /> Download File Contoh CSV
-          </motion.a>
+          <h1 className="text-2xl font-bold text-white tracking-tight">Database Penjualan Tiket</h1>
+          <p className="text-gray-400 text-sm">Kelola data historis untuk pelatihan model LSTM</p>
         </div>
-      </motion.div>
+        
+        <div className="flex flex-wrap items-center gap-3">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-accent/10 text-accent border border-accent/20 rounded-xl text-sm font-medium hover:bg-accent/20 transition-all"
+          >
+            <Upload size={18} /> Import Data
+          </motion.button>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Form Input Manual */}
-        <div className="lg:col-span-1 space-y-6">
-          <motion.div variants={itemVariants} className="glass-panel p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-white mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {isEditing ? <Edit2 size={20} className="text-accent" /> : <Plus size={20} className="text-primary" />}
-                {isEditing ? 'Edit Data' : 'Input Manual'}
-              </div>
-              {isEditing && (
-                <motion.button whileHover={{ rotate: 90 }} onClick={cancelEdit} className="text-gray-400 hover:text-white">
-                  <X size={18} />
-                </motion.button>
-              )}
-            </h3>
-            <form onSubmit={handleManualSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">ID Transaksi/Periode</label>
-                <input 
-                  type="text" 
-                  className="input-field bg-gray-800/50 cursor-not-allowed opacity-60" 
-                  placeholder={isEditing ? formData.id : "Dibuat otomatis oleh sistem..."} 
-                  value={isEditing ? formData.id : ""} 
-                  readOnly 
-                />
-                <p className="text-[10px] text-gray-500 mt-1 italic">
-                  Format: tiket-{new Date().toISOString().split('T')[0].replace(/-/g, '')}-XXX
-                </p>
-              </div>
-              <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Tanggal Transaksi</label>
-                  <input 
-                    required 
-                    type="date" 
-                    className="input-field" 
-                    value={formData.sale_date} 
-                    onChange={e => {
-                      const dateObj = new Date(e.target.value);
-                      if (!isNaN(dateObj.getTime())) {
-                        const year = dateObj.getFullYear();
-                        const firstDayOfYear = new Date(year, 0, 1);
-                        const pastDaysOfYear = (dateObj - firstDayOfYear) / 86400000;
-                        const week = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
-                        setFormData({...formData, sale_date: e.target.value, week, year});
-                      } else {
-                        setFormData({...formData, sale_date: e.target.value});
-                      }
-                    }} 
-                  />
-                  {formData.week && (
-                    <p className="text-[10px] text-accent mt-1">Terdeteksi: Minggu ke-{formData.week}, Tahun {formData.year}</p>
-                  )}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Jumlah Tiket Terjual</label>
-                <input required type="number" min="0" className="input-field" placeholder="0" value={formData.tickets_sold} onChange={e => setFormData({...formData, tickets_sold: e.target.value})} />
-              </div>
-              <motion.button 
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                type="submit" 
-                className={`btn-primary w-full ${isEditing ? 'bg-accent hover:bg-accent/90 shadow-accent/25' : ''}`}
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => {
+              setIsEditing(false);
+              setFormData({ id: '', sale_date: '', week: '', year: '', tickets_sold: '' });
+              setShowModal(true);
+            }}
+            className="btn-primary flex items-center gap-2 px-6 py-2"
+          >
+            <Plus size={18} /> Input Manual
+          </motion.button>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="grid grid-cols-1 gap-6">
+        {/* Modal: Input Manual */}
+        <AnimatePresence>
+          {showModal && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9, y: 30 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 30 }}
+                className="glass-panel p-8 max-w-md w-full border-primary/30 shadow-[0_0_50px_rgba(59,130,246,0.15)] relative"
               >
-                {isEditing ? 'Perbarui Data' : 'Simpan Data'}
-              </motion.button>
-            </form>
-          </motion.div>
+                <button onClick={cancelEdit} className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors"><X size={24} /></button>
+                <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                  {isEditing ? <Edit2 size={24} className="text-accent" /> : <Plus size={24} className="text-primary" />}
+                  {isEditing ? 'Edit Data Penjualan' : 'Input Data Manual'}
+                </h3>
+                <form onSubmit={handleManualSubmit} className="space-y-6">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">ID Transaksi</label>
+                    <input type="text" className="input-field bg-gray-800/50 cursor-not-allowed opacity-60" placeholder={isEditing ? formData.id : "Otomatis..."} value={isEditing ? formData.id : ""} readOnly />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">Tanggal Transaksi</label>
+                    <input required type="date" className="input-field" value={formData.sale_date} onChange={e => {
+                        const dateObj = new Date(e.target.value);
+                        if (!isNaN(dateObj.getTime())) {
+                          const year = dateObj.getFullYear();
+                          const firstDayOfYear = new Date(year, 0, 1);
+                          const pastDaysOfYear = (dateObj - firstDayOfYear) / 86400000;
+                          const week = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+                          setFormData({...formData, sale_date: e.target.value, week, year});
+                        } else { setFormData({...formData, sale_date: e.target.value}); }
+                    }} />
+                    {formData.week && <p className="text-xs text-accent mt-2 font-medium">Minggu ke-{formData.week}, {formData.year}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">Jumlah Terjual</label>
+                    <input required type="number" min="0" className="input-field" placeholder="0" value={formData.tickets_sold} onChange={e => setFormData({...formData, tickets_sold: e.target.value})} />
+                  </div>
+                  <div className="flex gap-3 pt-4">
+                    <button type="button" onClick={cancelEdit} className="btn-secondary flex-1">Batal</button>
+                    <button type="submit" className={`btn-primary flex-1 ${isEditing ? 'bg-accent hover:bg-accent/90' : ''}`}>{isEditing ? 'Simpan' : 'Simpan'}</button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
-          <motion.div variants={itemVariants} className="glass-panel p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <FileSpreadsheet size={20} className="text-accent" /> Import CSV
-            </h3>
-            <motion.label 
-              whileHover={{ scale: 1.02, backgroundColor: 'rgba(31, 41, 55, 0.8)' }}
-              whileTap={{ scale: 0.98 }}
-              className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-700 border-dashed rounded-lg cursor-pointer bg-gray-800/50 hover:border-primary transition-all duration-300"
-            >
-              <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                <Upload size={28} className="text-gray-400 mb-2 group-hover:text-primary transition-colors" />
-                <p className="text-sm text-gray-400"><span className="font-semibold text-primary">Klik untuk upload</span></p>
-              </div>
-              <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} disabled={loading} />
-            </motion.label>
-            {loading && <p className="text-sm text-accent mt-2 text-center animate-pulse">Memproses file...</p>}
-          </motion.div>
-        </div>
+        {/* Modal: Import Data (Combined Guide + Upload) - Premium Redesign */}
+        <AnimatePresence>
+          {showImportModal && (
+            <div className="fixed inset-0 bg-black/85 backdrop-blur-xl z-[100] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9, y: 40 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 40 }}
+                className="glass-panel max-w-4xl w-full border-white/10 shadow-[0_0_100px_rgba(0,0,0,0.5)] relative overflow-hidden"
+              >
+                {/* Decorative Background Elements */}
+                <div className="absolute -top-24 -left-24 w-64 h-64 bg-primary/20 blur-[80px] rounded-full"></div>
+                <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-accent/20 blur-[80px] rounded-full"></div>
 
-        {/* Tabel Data */}
-        <motion.div variants={itemVariants} className="lg:col-span-2 glass-panel p-6 shadow-xl flex flex-col h-full">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
-            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-              <Search size={20} className="text-primary"/> Database Penjualan
-            </h3>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
-              <div className="relative w-full sm:w-56">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search size={16} className="text-gray-500" />
+                <div className="relative p-8 md:p-10">
+                  <button 
+                    onClick={() => setShowImportModal(false)} 
+                    className="absolute top-6 right-6 p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-all z-10"
+                  >
+                    <X size={24} />
+                  </button>
+                  
+                  <div className="mb-10 text-center md:text-left">
+                    <h3 className="text-3xl font-extrabold text-white tracking-tight mb-2">
+                      Import Database <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">Penjualan</span>
+                    </h3>
+                    <p className="text-gray-400">Pastikan format file Anda sudah sesuai dengan standar sistem.</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* Step 1: Preparation Card */}
+                    <motion.div 
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.1 }}
+                      className="bg-white/5 border border-white/10 rounded-3xl p-6 relative group overflow-hidden"
+                    >
+                      <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <AlertTriangle size={80} />
+                      </div>
+                      
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400 border border-blue-500/20">
+                          <span className="font-bold">01</span>
+                        </div>
+                        <h4 className="text-lg font-bold text-white">Persiapan Data</h4>
+                      </div>
+
+                      <div className="space-y-5">
+                        <div className="space-y-3">
+                          {[
+                            { label: 'Format File', value: 'CSV (Comma Separated)', color: 'text-blue-400' },
+                            { label: 'Header Wajib', value: 'Tanggal, Jumlah', color: 'text-emerald-400' },
+                            { label: 'Format Tanggal', value: 'YYYY-MM-DD', color: 'text-accent' },
+                          ].map((spec, i) => (
+                            <div key={i} className="flex justify-between items-center text-sm py-2 border-b border-white/5">
+                              <span className="text-gray-500">{spec.label}</span>
+                              <span className={`font-mono font-medium ${spec.color}`}>{spec.value}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <p className="text-xs text-gray-500 leading-relaxed italic">
+                          * Sistem akan otomatis mengekstrak data Minggu dan Tahun dari kolom Tanggal secara cerdas.
+                        </p>
+
+                        <motion.a 
+                          whileHover={{ scale: 1.02, backgroundColor: 'rgba(59, 130, 246, 0.2)' }} 
+                          whileTap={{ scale: 0.98 }} 
+                          href="/template_data.csv" 
+                          download 
+                          className="flex items-center justify-center gap-3 w-full py-4 bg-blue-500/10 border border-blue-500/30 text-blue-400 rounded-2xl font-bold transition-all shadow-lg"
+                        >
+                          <Download size={20} /> 
+                          <span>Download Template .CSV</span>
+                        </motion.a>
+                      </div>
+                    </motion.div>
+
+                    {/* Step 2: Upload Card */}
+                    <motion.div 
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.2 }}
+                      className="bg-white/5 border border-white/10 rounded-3xl p-6 relative group overflow-hidden flex flex-col"
+                    >
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center text-accent border border-accent/20">
+                          <span className="font-bold">02</span>
+                        </div>
+                        <h4 className="text-lg font-bold text-white">Eksekusi Import</h4>
+                      </div>
+
+                      <div className="flex-1 flex flex-col justify-center">
+                        <motion.label 
+                          whileHover={{ scale: 1.01, borderColor: 'rgba(168, 85, 247, 0.5)', backgroundColor: 'rgba(168, 85, 247, 0.05)' }}
+                          className="flex flex-col items-center justify-center w-full h-56 border-2 border-gray-700 border-dashed rounded-3xl cursor-pointer bg-black/20 transition-all duration-300 group"
+                        >
+                          <div className="flex flex-col items-center justify-center p-6 text-center">
+                            <div className="p-4 bg-accent/10 rounded-2xl mb-4 group-hover:scale-110 group-hover:bg-accent/20 transition-all">
+                              <Upload size={40} className="text-accent" />
+                            </div>
+                            <p className="text-white font-medium mb-1">Klik atau Drop File</p>
+                            <p className="text-xs text-gray-500">Maksimum ukuran file: 10MB</p>
+                          </div>
+                          <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} disabled={loading} />
+                        </motion.label>
+                      </div>
+
+                      {loading && (
+                        <div className="mt-4 p-3 bg-accent/10 border border-accent/20 rounded-2xl flex items-center gap-3">
+                          <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin"></div>
+                          <p className="text-xs text-accent font-bold tracking-widest uppercase">Memproses Data...</p>
+                        </div>
+                      )}
+                    </motion.div>
+                  </div>
                 </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Tabel Data Full Width */}
+        <motion.div variants={itemVariants} className="glass-panel p-6 shadow-2xl flex flex-col min-h-[600px] border-white/5 relative overflow-hidden">
+          {/* Subtle Background Pattern */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 blur-[100px] -z-10 rounded-full"></div>
+          
+          <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4">
+            <h3 className="text-xl font-bold text-white flex items-center gap-3">
+              <Database size={24} className="text-primary"/> 
+              Data Historis Penjualan
+            </h3>
+            
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
+              <div className="relative flex-1 sm:w-64">
+                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
                 <input
                   type="text"
-                  placeholder="Cari ID/Tahun..."
-                  className="input-field pl-10 py-1.5 text-sm"
+                  placeholder="Cari data..."
+                  className="input-field pl-10 py-2 text-sm bg-gray-900/50"
                   value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    setCurrentPage(1);
-                  }}
+                  onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                 />
               </div>
-              <div className="flex gap-2 w-full sm:w-auto">
-                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleExportCSV} className="text-xs flex items-center justify-center gap-1 text-accent hover:text-accent/80 transition-colors bg-accent/10 px-3 py-1.5 rounded-lg border border-accent/20 w-full sm:w-auto whitespace-nowrap">
-                  <FileSpreadsheet size={14} /> Export CSV
+
+              <div className="flex items-center gap-2">
+                {selectedIds.length > 0 && (
+                  <motion.button 
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    onClick={handleBulkDelete}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-red-500/20"
+                  >
+                    <Trash2 size={16} /> Hapus ({selectedIds.length})
+                  </motion.button>
+                )}
+
+                <motion.button 
+                  whileHover={{ scale: 1.02 }} 
+                  whileTap={{ scale: 0.98 }} 
+                  onClick={handleExportCSV} 
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-sm font-bold hover:bg-emerald-500/20 transition-all"
+                >
+                  <Download size={18} /> Export
                 </motion.button>
-                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleDeleteAll} className="text-xs flex items-center justify-center gap-1 text-red-400 hover:text-red-300 transition-colors bg-red-500/10 px-3 py-1.5 rounded-lg border border-red-500/20 w-full sm:w-auto whitespace-nowrap">
-                  <Trash2 size={14} /> Hapus Semua
+                
+                <motion.button 
+                  whileHover={{ scale: 1.02 }} 
+                  whileTap={{ scale: 0.98 }} 
+                  onClick={handleDeleteAll} 
+                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-500 border border-red-500/20 rounded-xl text-sm font-bold hover:bg-red-500/20 transition-all"
+                >
+                  <Trash2 size={18} /> Reset
                 </motion.button>
               </div>
             </div>
@@ -403,31 +580,47 @@ const DataInput = () => {
             <table className="w-full text-sm text-left text-gray-400">
               <thead className="text-xs text-gray-300 uppercase bg-gray-800/80 sticky top-0 z-10 backdrop-blur-md">
                 <tr>
-                  <th className="px-4 py-3">No</th>
-                  <th className="px-4 py-3">ID Transaksi</th>
-                  <th className="px-4 py-3">Tanggal (Y-M-D)</th>
-                  <th className="px-4 py-3">Mgg/Thn</th>
-                  <th className="px-4 py-3 text-right">Jumlah Terjual</th>
-                  <th className="px-4 py-3 text-center">Waktu Input</th>
+                  <th className="px-4 py-3 border-r border-gray-700/50">
+                    <input 
+                      type="checkbox" 
+                      className="rounded border-gray-700 bg-gray-900 text-primary focus:ring-primary w-4 h-4"
+                      checked={selectedIds.length === displayedData.length && displayedData.length > 0}
+                      onChange={handleSelectAll}
+                    />
+                  </th>
+                  <th className="px-4 py-3 border-r border-gray-700/50">ID Transaksi</th>
+                  <th className="px-4 py-3 border-r border-gray-700/50">Tanggal (Y-M-D)</th>
+                  <th className="px-4 py-3 border-r border-gray-700/50">Mgg/Thn</th>
+                  <th className="px-4 py-3 border-r border-gray-700/50 text-right">Jumlah Terjual</th>
+                  <th className="px-4 py-3 border-r border-gray-700/50 text-center">Waktu Input</th>
                   <th className="px-4 py-3 text-center">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800/50">
-                {displayedData.length > 0 ? displayedData.map((item, index) => (
+                {loading ? (
+                  [...Array(5)].map((_, i) => <SkeletonRow key={i} />)
+                ) : displayedData.length > 0 ? displayedData.map((item, index) => (
                   <motion.tr 
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
                     whileHover={{ backgroundColor: 'rgba(55, 65, 81, 0.4)', scale: 1.01 }}
                     key={item.id} 
-                    className="border-b border-gray-700/50 hover:bg-gray-800/30 origin-left"
+                    className={`border-b border-gray-700/50 hover:bg-gray-800/30 origin-left ${selectedIds.includes(item.id) ? 'bg-primary/5' : ''}`}
                   >
-                    <td className="px-4 py-3">{(currentPage - 1) * (rowsPerPage === 'all' ? 0 : rowsPerPage) + index + 1}</td>
-                    <td className="px-4 py-3 font-medium text-gray-300">{item.id}</td>
-                    <td className="px-4 py-3 text-accent font-bold">{item.sale_date}</td>
-                    <td className="px-4 py-3 text-xs">M{item.week} / {item.year}</td>
-                    <td className="px-4 py-3 text-right text-accent font-medium">{parseInt(item.tickets_sold).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-center text-xs text-gray-500">
+                    <td className="px-4 py-3 border-r border-gray-700/30 text-center">
+                      <input 
+                        type="checkbox" 
+                        className="rounded border-gray-700 bg-gray-900 text-primary focus:ring-primary w-4 h-4"
+                        checked={selectedIds.includes(item.id)}
+                        onChange={() => handleSelectRow(item.id)}
+                      />
+                    </td>
+                    <td className="px-4 py-3 border-r border-gray-700/30 font-medium text-gray-300">{item.id}</td>
+                    <td className="px-4 py-3 border-r border-gray-700/30 text-accent font-bold">{item.sale_date}</td>
+                    <td className="px-4 py-3 border-r border-gray-700/30 text-xs">M{item.week} / {item.year}</td>
+                    <td className="px-4 py-3 border-r border-gray-700/30 text-right text-accent font-medium">{parseInt(item.tickets_sold).toLocaleString()}</td>
+                    <td className="px-4 py-3 border-r border-gray-700/30 text-center text-xs text-gray-500">
                       {item.created_at ? new Date(item.created_at).toLocaleString('id-ID', { 
                         day: '2-digit', 
                         month: '2-digit', 
@@ -477,6 +670,51 @@ const DataInput = () => {
           )}
         </motion.div>
       </div>
+
+      {/* Modal: Universal Confirmation */}
+      <AnimatePresence>
+        {confirmConfig.show && (
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="glass-panel p-8 max-w-sm w-full border-white/10 shadow-2xl text-center"
+            >
+              <div className={`w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center ${
+                confirmConfig.type === 'danger' ? 'bg-red-500/20 text-red-500 border-red-500/20' : 'bg-primary/20 text-primary border-primary/20'
+              } border-2`}>
+                <AlertTriangle size={32} />
+              </div>
+              
+              <h3 className="text-xl font-bold text-white mb-2">{confirmConfig.title}</h3>
+              <p className="text-gray-400 text-sm mb-8 leading-relaxed">
+                {confirmConfig.message}
+              </p>
+
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setConfirmConfig({ ...confirmConfig, show: false })}
+                  className="flex-1 px-4 py-3 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl font-bold transition-all"
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={() => {
+                    confirmConfig.onConfirm();
+                    setConfirmConfig({ ...confirmConfig, show: false });
+                  }}
+                  className={`flex-1 px-4 py-3 rounded-xl font-bold transition-all shadow-lg ${
+                    confirmConfig.type === 'danger' ? 'bg-red-600 hover:bg-red-500 text-white shadow-red-600/20' : 'bg-primary hover:bg-primary/90 text-white shadow-primary/20'
+                  }`}
+                >
+                  Ya, Lanjutkan
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };
