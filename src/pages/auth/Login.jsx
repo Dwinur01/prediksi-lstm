@@ -42,7 +42,7 @@ const Login = ({ setUser }) => {
         localStorage.setItem('user', JSON.stringify(response.data.user));
         setUser(response.data.user);
         toast.success('Login berhasil!');
-        navigate('/');
+        navigate('/dashboard');
       }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Terjadi kesalahan saat login.');
@@ -70,13 +70,13 @@ const Login = ({ setUser }) => {
         </motion.button>
       </div>
 
-      <div className="glass-panel w-full max-w-md p-8 relative z-10">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-primary to-accent mb-4 shadow-lg shadow-primary/30">
-            <PlaneTakeoff size={32} className="text-white" />
+      <div className="glass-panel w-full max-w-md p-10 relative z-10 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.2)]">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-[2rem] bg-gradient-to-tr from-primary to-blue-600 mb-6 shadow-2xl shadow-primary/30 group">
+            <PlaneTakeoff size={40} className="text-white group-hover:scale-110 transition-transform duration-500" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">SkyPredict Login</h2>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">Masuk untuk mengelola data dan prediksi LSTM</p>
+          <h2 className="text-4xl font-[900] text-gray-900 dark:text-white mb-2 tracking-tighter italic">SWA Predict</h2>
+          <p className="text-gray-500 dark:text-gray-400 text-sm font-medium tracking-tight">Enterprise Neural Intelligence Pipeline</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">

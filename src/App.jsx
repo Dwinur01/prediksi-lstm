@@ -8,6 +8,8 @@ import DataInput from './pages/dashboard/DataInput';
 import LstmProcess from './pages/dashboard/LstmProcess';
 import Report from './pages/dashboard/Report';
 import Profile from './pages/dashboard/Profile';
+import Landing from './pages/Landing';
+import CustomCursor from './components/ui/CustomCursor';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -35,11 +37,13 @@ function App() {
 
   return (
     <Router>
+      <CustomCursor />
       <Routes>
-        <Route path="/login" element={!user ? <Login setUser={setUser} /> : <Navigate to="/" />} />
-        <Route path="/register" element={!user ? <Register /> : <Navigate to="/" />} />
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={!user ? <Login setUser={setUser} /> : <Navigate to="/dashboard" />} />
+        <Route path="/register" element={!user ? <Register /> : <Navigate to="/dashboard" />} />
         
-        <Route path="/" element={user ? <Layout user={user} setUser={setUser} /> : <Navigate to="/login" />}>
+        <Route path="/dashboard" element={user ? <Layout user={user} setUser={setUser} /> : <Navigate to="/login" />}>
           <Route index element={<Dashboard />} />
           <Route path="data-input" element={<DataInput />} />
           <Route path="lstm-process" element={<LstmProcess />} />

@@ -45,25 +45,25 @@ const Profile = ({ user, setUser }) => {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Pengaturan Profil</h1>
-        <p className="text-gray-500 dark:text-gray-400">Perbarui informasi akun dan ganti password Anda.</p>
+        <h1 className="text-4xl font-[900] text-gray-900 dark:text-white mb-2 tracking-tighter italic">Pengaturan Profil</h1>
+        <p className="text-gray-500 dark:text-gray-400 font-medium">Perbarui informasi akun dan ganti password Anda.</p>
       </div>
 
       <div className="glass-panel p-8">
         <form onSubmit={handleSubmit} className="space-y-6">
           
-          <div className="flex items-center gap-4 pb-6 border-b border-gray-200 dark:border-gray-700/50">
-            <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center border-2 border-primary/50">
-              <User size={40} className="text-primary" />
+          <div className="flex items-center gap-6 pb-8 border-b border-gray-200 dark:border-white/5">
+            <div className="w-24 h-24 rounded-[2rem] bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center border border-primary/20 shadow-xl">
+              <User size={48} className="text-primary" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{user?.username}</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Administrator</p>
+              <h3 className="text-2xl font-[900] text-gray-900 dark:text-white tracking-tight italic">{user?.username}</h3>
+              <p className="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">SWA Enterprise Administrator</p>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1.5">Nama Lengkap</label>
+            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Nama Lengkap</label>
             <input 
               type="text" 
               className="input-field" 

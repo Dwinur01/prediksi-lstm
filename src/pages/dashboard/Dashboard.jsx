@@ -218,15 +218,16 @@ const Dashboard = () => {
     >
       <motion.div variants={itemVariants} className="flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Ringkasan Dashboard</h1>
-          <p className="text-gray-600 dark:text-gray-400">Ikhtisar data penjualan tiket pesawat dan performa sistem.</p>
+          <h1 className="text-4xl font-[900] text-gray-900 dark:text-white mb-2 tracking-tighter">Ringkasan Dashboard</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Ikhtisar data penjualan tiket pesawat dan performa sistem cerdas.</p>
         </div>
         <motion.div 
-          animate={{ scale: [1, 1.05, 1] }} 
-          transition={{ repeat: Infinity, duration: 2 }}
-          className="text-xs text-blue-600 dark:text-primary bg-primary/10 px-3 py-1.5 rounded-full border border-primary/30 font-bold shadow-sm"
+          animate={{ scale: [1, 1.05, 1], rotate: [0, 2, 0, -2, 0] }} 
+          transition={{ repeat: Infinity, duration: 4 }}
+          className="text-xs text-blue-600 dark:text-primary bg-primary/10 px-4 py-2 rounded-2xl border border-primary/20 font-black shadow-sm flex items-center gap-2"
         >
-          Sistem Online & Terhubung
+          <div className="w-2 h-2 bg-primary rounded-full animate-ping"></div>
+          SISTEM AKTIF & TERHUBUNG
         </motion.div>
       </motion.div>
 
@@ -398,12 +399,12 @@ const Dashboard = () => {
                     fillOpacity={1} 
                     fill="url(#colorSales)" 
                   />
-                  <Area 
+<Area 
                     type="monotone" 
                     dataKey="Baseline" 
                     stroke="#f59e0b" 
                     strokeWidth={1.5}
-                    strokeDasharray="4 4"
+                    strokeDasharray="4 4" 
                     fill="transparent" 
                   />
                   <Area 

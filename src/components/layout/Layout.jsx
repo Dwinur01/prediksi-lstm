@@ -44,11 +44,11 @@ const Layout = ({ user, setUser }) => {
   };
 
   const navItems = [
-    { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
-    { name: 'Data Penjualan', path: '/data-input', icon: <Database size={20} /> },
-    { name: 'Prediksi LSTM', path: '/lstm-process', icon: <BrainCircuit size={20} /> },
-    { name: 'Laporan Hasil', path: '/report', icon: <FileText size={20} /> },
-    { name: 'Profil', path: '/profile', icon: <User size={20} /> },
+    { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={20} /> },
+    { name: 'Data Penjualan', path: '/dashboard/data-input', icon: <Database size={20} /> },
+    { name: 'Prediksi LSTM', path: '/dashboard/lstm-process', icon: <BrainCircuit size={20} /> },
+    { name: 'Laporan Hasil', path: '/dashboard/report', icon: <FileText size={20} /> },
+    { name: 'Profil', path: '/dashboard/profile', icon: <User size={20} /> },
   ];
 
   return (
@@ -58,38 +58,48 @@ const Layout = ({ user, setUser }) => {
         initial={{ x: -300 }}
         animate={{ x: 0 }}
         transition={{ type: "spring", stiffness: 100, damping: 20 }}
-        className="w-72 bg-white dark:bg-surface/80 backdrop-blur-xl border-r border-gray-100 dark:border-gray-800 rounded-none flex flex-col z-20 relative"
+        className="w-80 bg-white/90 dark:bg-surface/90 backdrop-blur-3xl border-r border-gray-100 dark:border-white/5 rounded-none flex flex-col z-20 relative shadow-2xl"
       >
-        <div className="p-8 flex items-center gap-4">
-          <div className="p-2.5 bg-primary/10 text-primary rounded-2xl shadow-inner border border-primary/10">
-            <PlaneTakeoff size={28} />
+        <div className="p-10 flex items-center gap-5">
+          <div className="p-3 bg-gradient-to-br from-primary/20 to-accent/20 text-primary rounded-[1.5rem] shadow-xl border border-primary/10">
+            <PlaneTakeoff size={32} />
           </div>
-          <h1 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent tracking-tighter">SWA Predict</h1>
+          <h1 className="text-3xl font-[900] bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent tracking-tighter italic">SWA Predict</h1>
         </div>
         
-        <div className="mx-6 p-4 rounded-2xl border border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-transparent mb-4">
-          <p className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-1">Status Sesi</p>
-          <p className="font-black text-gray-900 dark:text-gray-100 truncate text-base">{user?.name || 'Administrator'}</p>
+        <div className="mx-8 p-5 rounded-[2rem] border border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-white/5 mb-6 group hover:bg-white dark:hover:bg-white/10 transition-all duration-500 shadow-sm hover:shadow-xl">
+          <p className="text-[10px] font-extrabold text-gray-400 dark:text-gray-500 uppercase tracking-[0.3em] mb-2">Authenticated User</p>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black">
+              {user?.name?.charAt(0) || 'A'}
+            </div>
+            <p className="font-extrabold text-gray-900 dark:text-gray-100 truncate text-lg tracking-tight">{user?.name || 'Administrator'}</p>
+          </div>
         </div>
 
         <nav className="flex-1 py-6 px-4 space-y-2">
           {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
             return (
               <Link key={item.path} to={item.path}>
                 <motion.div
                   whileHover={{ scale: 1.02, x: 5 }}
                   whileTap={{ scale: 0.98 }}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors duration-200 ${
-                    isActive 
-                      ? 'bg-gradient-to-r from-primary/20 to-primary/5 text-primary shadow-sm border border-primary/20' 
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800/80 hover:text-gray-900 dark:hover:text-gray-200 border border-transparent'
+                  className={`flex items-center gap-4 px-6 py-4 rounded-[1.5rem] transition-all duration-500 relative group overflow-hidden ${
+                    location.pathname === item.path 
+                      ? 'bg-primary text-white shadow-xl shadow-primary/30 scale-[1.02]' 
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white hover:translate-x-2'
                   }`}
                 >
-                  <span className={isActive ? 'text-primary' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'}>
+                  <div className={`transition-transform duration-500 group-hover:scale-110 ${location.pathname === item.path ? 'scale-110' : ''}`}>
                     {item.icon}
-                  </span>
-                  <span className="font-medium">{item.name}</span>
+                  </div>
+                  <span className="font-extrabold text-sm tracking-tight">{item.name}</span>
+                  {location.pathname === item.path && (
+                    <motion.div 
+                      layoutId="activeTab"
+                      className="absolute right-3 w-1.5 h-1.5 bg-white rounded-full shadow-[0_0_8px_#fff]"
+                    />
+                  )}
                 </motion.div>
               </Link>
             );

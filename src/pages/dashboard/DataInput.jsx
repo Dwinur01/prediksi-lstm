@@ -308,12 +308,12 @@ const DataInput = () => {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="space-y-6"
+      className="space-y-10"
     >
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Database Penjualan Tiket</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">Kelola data historis untuk pelatihan model LSTM</p>
+          <h1 className="text-4xl font-[900] text-gray-900 dark:text-white tracking-tighter mb-1">Database Penjualan Tiket</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Kelola data historis untuk pelatihan model LSTM cerdas</p>
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
@@ -515,7 +515,7 @@ const DataInput = () => {
         </AnimatePresence>
 
         {/* Tabel Data Full Width */}
-        <motion.div variants={itemVariants} className="glass-panel p-6 shadow-2xl flex flex-col min-h-[600px] border-white/5 relative overflow-hidden">
+        <motion.div variants={itemVariants} className="glass-panel p-8 shadow-2xl flex flex-col min-h-[600px] border-white/10 relative overflow-hidden">
           {/* Subtle Background Pattern */}
           <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 blur-[100px] -z-10 rounded-full"></div>
           
@@ -531,7 +531,7 @@ const DataInput = () => {
                 <input
                   type="text"
                   placeholder="Cari data..."
-                  className="input-field pl-10 py-2 text-sm bg-gray-50 dark:bg-gray-900/50"
+                  className="input-field pl-12 py-3.5 text-sm font-medium"
                   value={searchTerm}
                   onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                 />

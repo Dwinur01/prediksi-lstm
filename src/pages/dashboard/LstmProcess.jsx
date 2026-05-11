@@ -551,17 +551,17 @@ const LstmProcess = () => {
       {/* Header & Controls */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div className="flex items-center gap-4">
-          <div className={`p-4 rounded-3xl ${status === 'training' ? 'bg-primary/20 animate-pulse' : 'bg-gray-100 dark:bg-gray-800'} shadow-2xl border border-gray-200 dark:border-white/5`}>
-            <BrainCircuit className={status === 'training' ? 'text-primary' : 'text-gray-500'} size={32} />
+          <div className={`p-5 rounded-[2rem] ${status === 'training' ? 'bg-primary/20 animate-pulse' : 'bg-gray-100 dark:bg-white/5'} shadow-2xl border border-gray-200 dark:border-white/5`}>
+            <BrainCircuit className={status === 'training' ? 'text-primary' : 'text-gray-500'} size={40} />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
+            <h1 className="text-4xl font-[900] text-gray-900 dark:text-white tracking-tighter flex items-center gap-4 italic">
               Neural Engine
-              <span className={`text-[10px] px-2 py-0.5 rounded-full border ${status === 'training' ? 'border-primary text-primary bg-primary/10 animate-pulse' : 'border-gray-700 text-gray-500'} uppercase font-black tracking-widest`}>
+              <span className={`text-[10px] px-3 py-1 rounded-full border ${status === 'training' ? 'border-primary text-primary bg-primary/10 animate-pulse' : 'border-gray-700 text-gray-500'} uppercase font-black tracking-[0.2em]`}>
                 {status === 'training' ? 'Processing' : status === 'success' ? 'Ready' : 'Idle'}
               </span>
             </h1>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">Long Short-Term Memory Prediction Pipeline</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Long Short-Term Memory Deep Learning Prediction Pipeline</p>
           </div>
         </div>
         
@@ -612,51 +612,55 @@ const LstmProcess = () => {
 
       {/* Config Panel */}
       {showConfig && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="glass-panel p-8 max-w-md w-full border-primary/20">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">Konfigurasi Model LSTM</h2>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xl z-[100] flex items-center justify-center p-6">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="glass-panel p-10 max-w-lg w-full border-white/20 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.2)]"
+          >
+            <h2 className="text-3xl font-[900] text-gray-900 dark:text-white mb-8 tracking-tighter italic">Konfigurasi Model LSTM</h2>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <label className="block text-sm text-gray-500 dark:text-gray-400">Epochs (1-300)</label>
+                    <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-[10px] mb-2">Epochs (1-300)</label>
                     <Tooltip text="Jumlah iterasi pelatihan model. Semakin tinggi biasanya semakin akurat tapi butuh waktu lebih lama.">
                       <Info size={12} className="text-gray-600 hover:text-primary cursor-help" />
                     </Tooltip>
                   </div>
-                  <input type="number" min="1" max="300" className="input-field" value={params.epochs} onChange={e => setParams({...params, epochs: Math.min(300, parseInt(e.target.value) || 1)})} />
+                  <input type="number" min="1" max="300" className="input-field !p-3.5 bg-white dark:bg-black/20" value={params.epochs} onChange={e => setParams({...params, epochs: Math.min(300, parseInt(e.target.value) || 1)})} />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">Learning Rate</label>
-                  <input type="number" step="0.001" className="input-field" value={params.learningRate} onChange={e => setParams({...params, learningRate: parseFloat(e.target.value)})} />
+                  <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-[10px] mb-2">Learning Rate</label>
+                  <input type="number" step="0.001" className="input-field !p-3.5 bg-white dark:bg-black/20" value={params.learningRate} onChange={e => setParams({...params, learningRate: parseFloat(e.target.value)})} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">Window Size (1-8)</label>
-                  <input type="number" min="1" max="8" className="input-field" value={params.windowSize} onChange={e => setParams({...params, windowSize: Math.min(8, parseInt(e.target.value) || 1)})} />
+                  <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-[10px] mb-2">Window Size (1-8)</label>
+                  <input type="number" min="1" max="8" className="input-field !p-3.5 bg-white dark:bg-black/20" value={params.windowSize} onChange={e => setParams({...params, windowSize: Math.min(8, parseInt(e.target.value) || 1)})} />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">EMA Period</label>
-                  <input type="number" min="1" max="20" className="input-field" value={params.emaPeriod} onChange={e => setParams({...params, emaPeriod: parseInt(e.target.value) || 1})} />
+                  <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-[10px] mb-2">EMA Period</label>
+                  <input type="number" min="1" max="20" className="input-field !p-3.5 bg-white dark:bg-black/20" value={params.emaPeriod} onChange={e => setParams({...params, emaPeriod: parseInt(e.target.value) || 1})} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">Forecast (Weeks)</label>
-                  <input type="number" min="1" max="12" className="input-field" value={params.forecastSteps} onChange={e => setParams({...params, forecastSteps: Math.min(12, parseInt(e.target.value) || 1)})} />
+                  <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-[10px] mb-2">Forecast (Weeks)</label>
+                  <input type="number" min="1" max="12" className="input-field !p-3.5 bg-white dark:bg-black/20" value={params.forecastSteps} onChange={e => setParams({...params, forecastSteps: Math.min(12, parseInt(e.target.value) || 1)})} />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">Sales Target</label>
-                  <input type="number" className="input-field" value={params.salesTarget} onChange={e => setParams({...params, salesTarget: parseInt(e.target.value) || 0})} />
+                  <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-[10px] mb-2">Sales Target</label>
+                  <input type="number" className="input-field !p-3.5 bg-white dark:bg-black/20" value={params.salesTarget} onChange={e => setParams({...params, salesTarget: parseInt(e.target.value) || 0})} />
                 </div>
               </div>
             </div>
-            <div className="flex justify-end gap-3 mt-8">
-              <button onClick={() => setShowConfig(false)} className="btn-secondary text-sm">Batal</button>
-              <button onClick={() => setShowConfig(false)} className="btn-primary text-sm">Simpan</button>
+            <div className="flex justify-end gap-4 mt-12">
+              <button onClick={() => setShowConfig(false)} className="btn-secondary !py-4 text-xs tracking-widest flex-1">BATAL</button>
+              <button onClick={() => setShowConfig(false)} className="btn-primary !py-4 text-xs tracking-widest flex-1">SIMPAN KONFIGURASI</button>
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
 

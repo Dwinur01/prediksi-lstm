@@ -66,13 +66,13 @@ const Register = () => {
         </motion.button>
       </div>
 
-      <div className="glass-panel w-full max-w-md p-8 relative z-10">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-accent to-primary mb-4 shadow-lg shadow-accent/30">
-            <PlaneTakeoff size={32} className="text-white" />
+      <div className="glass-panel w-full max-w-md p-10 relative z-10 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.2)]">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-[2rem] bg-gradient-to-tr from-accent to-primary mb-6 shadow-2xl shadow-accent/30 group">
+            <PlaneTakeoff size={40} className="text-white group-hover:scale-110 transition-transform duration-500" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Buat Akun Baru</h2>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">Bergabung dengan SkyPredict hari ini</p>
+          <h2 className="text-4xl font-[900] text-gray-900 dark:text-white mb-2 tracking-tighter italic">Buat Akun</h2>
+          <p className="text-gray-500 dark:text-gray-400 text-sm font-medium tracking-tight">Bergabung dengan ekosistem SWA Predict</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
