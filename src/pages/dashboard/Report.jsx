@@ -27,14 +27,18 @@ const Report = () => {
 
   const fetchHistory = async () => {
     try {
+      let dbHistory = [];
       const response = await api.get('/data/predictions.php');
       if (response.data.status === 'success') {
-        setHistory(response.data.data);
-        if (response.data.data.length > 0) {
-          setSelectedReport(response.data.data[0]);
-        }
-      } else {
-        throw new Error('Network error');
+        dbHistory = response.data.data;
+      }
+      
+      const offlineHistory = JSON.parse(localStorage.getItem('swa-offline-history') || '[]');
+      const combined = [...offlineHistory, ...dbHistory];
+      
+      setHistory(combined);
+      if (combined.length > 0) {
+        setSelectedReport(combined[0]);
       }
     } catch (error) {
       console.warn('Using dummy history for report');
@@ -116,7 +120,7 @@ const Report = () => {
             <FileText className="text-primary" size={24} />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white tracking-tight">Management Laporan</h1>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">Management Laporan</h1>
             <p className="text-[10px] text-gray-500 uppercase tracking-[0.2em] mt-0.5">PT. Swabina Gatra Official Workspace</p>
           </div>
         </div>
@@ -127,7 +131,7 @@ const Report = () => {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => setShowMarginPop(!showMarginPop)}
-              className="bg-white/5 border border-white/10 px-6 py-2.5 rounded-xl text-sm font-bold text-gray-300 flex items-center gap-2 hover:bg-white/10 hover:border-white/20 transition-all"
+              className="bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 px-6 py-2.5 rounded-xl text-sm font-bold text-gray-600 dark:text-gray-300 flex items-center gap-2 hover:bg-gray-200 dark:hover:bg-white/10 hover:border-gray-300 dark:hover:border-white/20 transition-all"
             >
               <BarChart3 size={18} className="text-accent" />
               Konfigurasi Margin
@@ -158,7 +162,7 @@ const Report = () => {
                             type="number" 
                             value={margins[side]} 
                             onChange={(e) => updateMargin(side, e.target.value)}
-                            className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-sm text-white outline-none focus:border-accent"
+                            className="w-full bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-lg p-2 text-sm text-gray-900 dark:text-white outline-none focus:border-accent transition-colors"
                           />
                         </div>
                       ))}
@@ -190,26 +194,26 @@ const Report = () => {
         <div className="glass-panel overflow-hidden border-white/5 shadow-2xl relative">
           <div className="max-h-[350px] overflow-y-auto custom-scrollbar">
             <table className="w-full text-left border-collapse">
-              <thead className="sticky top-0 z-20 bg-[#0f172a] shadow-lg">
+              <thead className="sticky top-0 z-20 bg-gray-50 dark:bg-[#0f172a] shadow-lg">
                 <tr className="border-b border-white/10">
-                  <th className="p-5 border-r border-white/5 text-[9px] font-black text-gray-400 uppercase">ID</th>
-                  <th className="p-5 border-r border-white/5 text-[9px] font-black text-gray-400 uppercase">Waktu Run</th>
-                  <th className="p-5 border-r border-white/5 text-[9px] font-black text-gray-400 uppercase">MAPE</th>
-                  <th className="p-5 border-r border-white/5 text-[9px] font-black text-gray-400 uppercase">RMSE</th>
-                  <th className="p-5 text-[9px] font-black text-gray-400 uppercase text-right">Navigasi</th>
+                  <th className="p-5 border-r border-gray-200 dark:border-white/5 text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase">ID</th>
+                  <th className="p-5 border-r border-gray-200 dark:border-white/5 text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase">Waktu Run</th>
+                  <th className="p-5 border-r border-gray-200 dark:border-white/5 text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase">MAPE</th>
+                  <th className="p-5 border-r border-gray-200 dark:border-white/5 text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase">RMSE</th>
+                  <th className="p-5 text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase text-right">Navigasi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.03]">
+              <tbody className="divide-y divide-gray-200 dark:divide-white/[0.03]">
                 {history.map((h) => (
-                  <tr key={h.id} className={`hover:bg-white/[0.03] transition-colors ${selectedReport?.id === h.id ? 'bg-primary/10' : ''}`}>
-                    <td className="p-5 border-r border-white/5 text-xs font-mono text-gray-500">#{h.id}</td>
-                    <td className="p-5 border-r border-white/5 text-xs text-gray-200">{new Date(h.run_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}</td>
-                    <td className="p-5 border-r border-white/5 text-xs font-bold text-emerald-500">{parseFloat(h.mape).toFixed(2)}%</td>
-                    <td className="p-5 border-r border-white/5 text-xs text-gray-500 font-mono">{parseFloat(h.rmse).toFixed(2)}</td>
+                  <tr key={h.id} className={`hover:bg-gray-100 dark:hover:bg-white/[0.03] transition-colors ${selectedReport?.id === h.id ? 'bg-primary/10' : ''}`}>
+                    <td className="p-5 border-r border-gray-200 dark:border-white/5 text-xs font-mono text-gray-600 dark:text-gray-500">#{h.id}</td>
+                    <td className="p-5 border-r border-gray-200 dark:border-white/5 text-xs text-gray-700 dark:text-gray-200">{new Date(h.run_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}</td>
+                    <td className="p-5 border-r border-gray-200 dark:border-white/5 text-xs font-bold text-emerald-600 dark:text-emerald-500">{parseFloat(h.mape).toFixed(2)}%</td>
+                    <td className="p-5 border-r border-gray-200 dark:border-white/5 text-xs text-gray-600 dark:text-gray-500 font-mono">{parseFloat(h.rmse).toFixed(2)}</td>
                     <td className="p-5 text-right">
                       <button 
                         onClick={() => { setSelectedReport(h); window.scrollTo({ top: 450, behavior: 'smooth' }); }}
-                        className={`px-5 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${selectedReport?.id === h.id ? 'bg-primary text-white' : 'bg-white/5 text-gray-400'}`}
+                        className={`px-5 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${selectedReport?.id === h.id ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/10'}`}
                       >
                         {selectedReport?.id === h.id ? 'Previewing' : 'Lihat'}
                       </button>

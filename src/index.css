@@ -3,26 +3,34 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --background: 248 250 252; /* Setara dengan #f8fafc */
+    --surface: 255 255 255;    /* Setara dengan #ffffff */
+  }
+  .dark {
+    --background: 15 23 42;    /* Setara dengan #0f172a */
+    --surface: 30 41 59;       /* Setara dengan #1e293b */
+  }
   body {
-    @apply bg-background text-gray-100 font-sans antialiased;
+    @apply bg-background text-gray-800 dark:text-gray-100 font-sans antialiased transition-colors duration-300;
   }
 }
 
 @layer components {
   .glass-panel {
-    @apply bg-surface/80 backdrop-blur-md border border-gray-700/50 rounded-xl shadow-xl;
+    @apply bg-surface/95 dark:bg-surface/80 backdrop-blur-xl border border-gray-100 dark:border-gray-700/50 rounded-2xl shadow-2xl shadow-gray-200/50 dark:shadow-none transition-colors duration-300;
   }
   
   .btn-primary {
-    @apply bg-primary hover:bg-primary/90 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 shadow-lg shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-primary hover:bg-primary/90 text-white font-bold py-2.5 px-6 rounded-xl transition-all duration-300 shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed;
   }
   
   .btn-secondary {
-    @apply bg-secondary/20 hover:bg-secondary/40 border border-secondary/50 text-gray-200 font-medium py-2 px-4 rounded-lg transition-all duration-200;
+    @apply bg-white dark:bg-secondary/20 hover:bg-gray-50 dark:hover:bg-secondary/40 border border-gray-200 dark:border-secondary/50 text-gray-700 dark:text-gray-200 font-bold py-2.5 px-5 rounded-xl transition-all duration-300 shadow-sm hover:shadow-md;
   }
 
   .input-field {
-    @apply bg-gray-800/50 border border-gray-700 text-gray-100 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary block w-full p-2.5 outline-none transition-all duration-200;
+    @apply bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-xl focus:ring-4 focus:ring-primary/10 focus:border-primary block w-full p-3 outline-none transition-all duration-300;
   }
 }
 
@@ -32,15 +40,16 @@
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f172a; 
+  @apply bg-gray-100 dark:bg-[#0f172a]; 
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155; 
+  @apply bg-gray-300 dark:bg-[#334155]; 
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569; 
+  @apply bg-gray-400 dark:bg-[#475569]; 
 }
+
 @keyframes shimmer {
   100% {
     transform: translateX(100%);

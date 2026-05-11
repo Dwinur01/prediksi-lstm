@@ -45,7 +45,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <ErrorBoundary>
       <App />
       <Toaster position="top-right" toastOptions={{ 
-        style: { background: '#1e293b', color: '#fff', border: '1px solid #334155' } 
+        className: '!bg-surface !text-gray-800 dark:!text-gray-100 !border !border-gray-200 dark:!border-gray-700 !shadow-xl',
+        style: { }
       }} />
     </ErrorBoundary>
   </React.StrictMode>,

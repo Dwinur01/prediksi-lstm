@@ -50,6 +50,17 @@ const Dashboard = () => {
   const [historyResults, setHistoryResults] = useState(null);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isDarkMode, setIsDarkMode] = useState(true);
+
+  useEffect(() => {
+    setIsDarkMode(document.documentElement.classList.contains('dark'));
+    // Listen for theme changes (optional but good for consistency)
+    const observer = new MutationObserver(() => {
+      setIsDarkMode(document.documentElement.classList.contains('dark'));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -65,9 +76,19 @@ const Dashboard = () => {
       }
 
       // 2. Fetch latest prediction history
+      let latest = null;
       const histResponse = await api.get('/data/predictions.php');
       if (histResponse.data.status === 'success' && histResponse.data.data.length > 0) {
-        const latest = histResponse.data.data[0];
+        latest = histResponse.data.data[0];
+      } else {
+        // Cek LocalStorage jika DB kosong/error
+        const offlineHistory = JSON.parse(localStorage.getItem('swa-offline-history') || '[]');
+        if (offlineHistory.length > 0) {
+          latest = offlineHistory[0];
+        }
+      }
+
+      if (latest) {
         setLastRunDate(latest.run_date);
         
         try {
@@ -86,7 +107,6 @@ const Dashboard = () => {
           console.error('Failed to parse history JSON:', parseError);
         }
       } else {
-        // Reset history states if no history found
         setLastRunDate(null);
         setLatestForecast(null);
         setAuditAlerts(null);
@@ -171,7 +191,7 @@ const Dashboard = () => {
         onMouseLeave={() => { x.set(0); y.set(0); }}
         variants={itemVariants}
         whileHover={{ y: -5, scale: 1.02 }}
-        className={`${colorClass} rounded-3xl p-8 text-white relative overflow-hidden group cursor-pointer shadow-2xl transition-shadow`}
+        className={`${colorClass} rounded-3xl p-8 relative overflow-hidden group cursor-pointer shadow-2xl transition-shadow`}
       >
         <div className="absolute -right-6 -bottom-6 opacity-10 group-hover:scale-110 group-hover:-rotate-12 transition-all duration-700">
           <Icon size={140} />
@@ -180,7 +200,7 @@ const Dashboard = () => {
           <div className="p-3 bg-white/20 w-fit rounded-2xl mb-6 shadow-xl">
             <Icon size={28} />
           </div>
-          <p className="text-white/70 text-xs font-black uppercase tracking-[0.2em] mb-1">{title}</p>
+          <p className="opacity-70 text-xs font-black uppercase tracking-[0.2em] mb-1">{title}</p>
           <h3 className="text-4xl font-black tabular-nums">
             <AnimatedNumber value={value} />
           </h3>
@@ -198,13 +218,13 @@ const Dashboard = () => {
     >
       <motion.div variants={itemVariants} className="flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-2">Ringkasan Dashboard</h1>
-          <p className="text-gray-400">Ikhtisar data penjualan tiket pesawat dan performa sistem.</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Ringkasan Dashboard</h1>
+          <p className="text-gray-600 dark:text-gray-400">Ikhtisar data penjualan tiket pesawat dan performa sistem.</p>
         </div>
         <motion.div 
           animate={{ scale: [1, 1.05, 1] }} 
           transition={{ repeat: Infinity, duration: 2 }}
-          className="text-xs text-primary bg-primary/10 px-3 py-1.5 rounded-full border border-primary/20 font-medium shadow-[0_0_10px_rgba(59,130,246,0.2)]"
+          className="text-xs text-blue-600 dark:text-primary bg-primary/10 px-3 py-1.5 rounded-full border border-primary/30 font-bold shadow-sm"
         >
           Sistem Online & Terhubung
         </motion.div>
@@ -223,19 +243,19 @@ const Dashboard = () => {
               title="Total Tiket Terjual" 
               value={stats.total} 
               icon={TrendingUp} 
-              colorClass="bg-gradient-to-br from-primary to-blue-700 shadow-lg shadow-primary/20"
+              colorClass="bg-gradient-to-br from-primary to-blue-700 shadow-lg shadow-primary/20 text-white"
             />
             <StatCard 
               title="Rata-rata Mingguan" 
               value={stats.avg} 
               icon={Calendar} 
-              colorClass="bg-gradient-to-br from-purple-500 to-purple-700 shadow-lg shadow-purple/20"
+              colorClass="bg-gradient-to-br from-purple-500 to-purple-700 shadow-lg shadow-purple/20 text-white"
             />
             <StatCard 
               title="Data Terbaru" 
               value={stats.latest} 
               icon={AlertCircle} 
-              colorClass="bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 shadow-xl"
+              colorClass="bg-gradient-to-br from-slate-100 to-slate-200 dark:from-gray-800 dark:to-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl !text-gray-900 dark:!text-white"
             />
           </>
         )}
@@ -256,8 +276,8 @@ const Dashboard = () => {
             <AlertCircle size={20} />
           </motion.div>
           <div className="flex-1">
-            <h4 className="text-sm font-bold text-amber-500 uppercase tracking-wider">Perhatian: Kualitas Data Terdeteksi Rendah</h4>
-            <p className="text-xs text-gray-400 mt-0.5">{auditAlerts[0]} (dan {auditAlerts.length - 1} masalah lainnya)</p>
+            <h4 className="text-sm font-bold text-amber-600 dark:text-amber-500 uppercase tracking-wider">Perhatian: Kualitas Data Terdeteksi Rendah</h4>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{auditAlerts[0]} (dan {auditAlerts.length - 1} masalah lainnya)</p>
           </div>
           <Link to="/lstm-process" className="text-xs font-bold text-amber-500 hover:underline hover:text-amber-400 transition-colors">Lihat Detail & Audit</Link>
         </motion.div>
@@ -269,7 +289,7 @@ const Dashboard = () => {
           className="lg:col-span-2 glass-panel p-6 shadow-xl"
         >
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
               <motion.div
                  animate={{ scale: [1, 1.2, 1] }}
                  transition={{ repeat: Infinity, duration: 3 }}
@@ -278,7 +298,7 @@ const Dashboard = () => {
               </motion.div>
               Tren Penjualan Tiket
             </h3>
-            <div className="text-xs text-gray-400 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="text-xs text-gray-500 dark:text-gray-400 flex flex-wrap items-center gap-x-4 gap-y-2">
               <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-gray-500"></span> Aktual</div>
               <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_5px_rgba(245,158,11,0.5)]"></span> MA3</div>
               <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-primary shadow-[0_0_5px_rgba(59,130,246,0.8)]"></span> Prediksi</div>
@@ -340,7 +360,7 @@ const Dashboard = () => {
                       <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" className="[&>line]:stroke-gray-200 dark:[&>line]:stroke-[#1e293b]" vertical={false} />
                   <XAxis 
                     dataKey="name" 
                     stroke="#64748b" 
@@ -357,8 +377,17 @@ const Dashboard = () => {
                     tickFormatter={(value) => value.toLocaleString()}
                   />
                   <RechartsTooltip 
-                    contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', backdropFilter: 'blur(8px)', border: '1px solid rgba(51, 65, 85, 0.5)', borderRadius: '12px', fontSize: '12px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}
-                    itemStyle={{ fontSize: '11px', fontWeight: 'bold' }}
+                    contentStyle={{ 
+                      backgroundColor: isDarkMode ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.9)', 
+                      backdropFilter: 'blur(8px)', 
+                      border: isDarkMode ? '1px solid rgba(51, 65, 85, 0.5)' : '1px solid rgba(226, 232, 240, 0.8)', 
+                      borderRadius: '12px', 
+                      fontSize: '12px', 
+                      boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                      color: isDarkMode ? '#fff' : '#1e293b'
+                    }} 
+                    itemStyle={{ fontSize: '11px', fontWeight: 'bold', color: isDarkMode ? '#e2e8f0' : '#475569' }}
+                    labelStyle={{ fontWeight: 'bold', marginBottom: '4px', color: isDarkMode ? '#fff' : '#1e293b' }}
                     cursor={{ stroke: '#3b82f6', strokeWidth: 1, strokeDasharray: '4 4' }}
                   />
                   <Area 
@@ -410,21 +439,21 @@ const Dashboard = () => {
           className="lg:col-span-1 glass-panel p-6 flex flex-col shadow-xl relative overflow-hidden"
         >
           <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-full pointer-events-none"></div>
-          <h3 className="text-lg font-semibold text-white mb-6 relative z-10">Aksi Cepat</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6 relative z-10">Aksi Cepat</h3>
           <div className="space-y-4 flex-1 relative z-10">
             <Link to="/data-input">
               <motion.div 
-                whileHover={{ scale: 1.03, backgroundColor: 'rgba(31, 41, 55, 0.8)' }}
+                whileHover={{ scale: 1.03, backgroundColor: isDarkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(243, 244, 246, 0.8)' }}
                 whileTap={{ scale: 0.98 }}
-                className="flex items-center justify-between p-4 bg-gray-800/40 rounded-2xl transition-colors border border-gray-700/50 group cursor-pointer shadow-md mb-4"
+                className="flex items-center justify-between p-4 bg-gray-100 dark:bg-gray-800/40 rounded-2xl transition-colors border border-gray-200 dark:border-gray-700/50 group cursor-pointer shadow-md mb-4"
               >
                 <div className="flex items-center gap-3">
                   <div className="p-2.5 bg-accent/20 text-accent rounded-xl group-hover:scale-110 group-hover:bg-accent/30 transition-all shadow-inner">
                     <Database size={18} />
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-white group-hover:text-accent transition-colors">Input Data</div>
-                    <div className="text-[10px] text-gray-500">Kelola database tiket</div>
+                    <div className="text-sm font-bold text-gray-900 dark:text-white group-hover:text-accent transition-colors">Input Data</div>
+                    <div className="text-[10px] text-gray-500 dark:text-gray-400">Kelola database tiket</div>
                   </div>
                 </div>
                 <motion.div
@@ -437,7 +466,7 @@ const Dashboard = () => {
             </Link>
             <Link to="/lstm-process">
               <motion.div 
-                whileHover={{ scale: 1.03, backgroundColor: 'rgba(59, 130, 246, 0.2)' }}
+                whileHover={{ scale: 1.03, backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.15)' }}
                 whileTap={{ scale: 0.98 }}
                 className="flex items-center justify-between p-4 bg-primary/10 rounded-2xl transition-colors border border-primary/20 group cursor-pointer shadow-md shadow-primary/5"
               >
@@ -446,8 +475,8 @@ const Dashboard = () => {
                     <BrainCircuit size={18} />
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-white group-hover:text-primary transition-colors">Mulai Prediksi</div>
-                    <div className="text-[10px] text-gray-500">Running LSTM Engine</div>
+                    <div className="text-sm font-bold text-gray-900 dark:text-white group-hover:text-primary transition-colors">Mulai Prediksi</div>
+                    <div className="text-[10px] text-gray-500 dark:text-gray-400">Running LSTM Engine</div>
                   </div>
                 </div>
                 <motion.div
@@ -492,7 +521,7 @@ const Dashboard = () => {
       
       {/* Feature 1: Sales Heatmap */}
       <motion.div variants={itemVariants} className="glass-panel p-6 shadow-xl">
-        <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
           <Activity size={20} className="text-emerald-500" /> Heatmap Intensitas Penjualan
         </h3>
         <div className="flex flex-wrap gap-2">
@@ -536,7 +565,7 @@ const Dashboard = () => {
         className="glass-panel p-6 shadow-xl"
       >
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
             <Database size={20} className="text-accent" /> Tabel Data Historis
           </h3>
           <div className="relative w-full sm:w-64">
@@ -546,7 +575,7 @@ const Dashboard = () => {
             <input
               type="text"
               placeholder="Cari periode..."
-              className="input-field pl-10 py-2 text-sm bg-gray-800/80 focus:bg-gray-800 border-gray-700/50"
+              className="input-field pl-10 py-2 text-sm bg-gray-50 dark:bg-gray-800/80 focus:bg-white dark:focus:bg-gray-800 border-gray-200 dark:border-gray-700/50"
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
@@ -557,7 +586,7 @@ const Dashboard = () => {
         </div>
 
         <div className="flex items-center justify-between mb-3 px-1">
-          <div className="flex items-center gap-2 text-xs text-gray-400">
+          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
             <span>Show</span>
             <select 
               value={rowsPerPage} 
@@ -565,7 +594,7 @@ const Dashboard = () => {
                 setRowsPerPage(e.target.value === 'all' ? 'all' : parseInt(e.target.value));
                 setCurrentPage(1);
               }}
-              className="bg-gray-800 border border-gray-700 text-gray-300 rounded px-1 py-0.5 outline-none focus:border-primary"
+              className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded px-1 py-0.5 outline-none focus:border-primary"
             >
               <option value={5}>5</option>
               <option value={10}>10</option>
@@ -582,33 +611,33 @@ const Dashboard = () => {
         {loading ? (
           <SkeletonTable />
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-gray-700/50 max-h-80 overflow-y-auto custom-scrollbar bg-gray-900/20">
+          <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700/50 max-h-80 overflow-y-auto custom-scrollbar bg-gray-50/50 dark:bg-gray-900/20">
             <table className="w-full text-sm text-left text-gray-400">
-              <thead className="text-xs text-gray-300 uppercase bg-gray-800/90 sticky top-0 z-10 backdrop-blur-md shadow-sm">
+              <thead className="text-xs text-gray-600 dark:text-gray-300 uppercase bg-gray-100 dark:bg-gray-800/90 sticky top-0 z-10 backdrop-blur-md shadow-sm">
                 <tr>
-                  <th className="px-4 py-4 border-r border-gray-700/50">No</th>
-                  <th className="px-4 py-4 border-r border-gray-700/50">ID Transaksi</th>
-                  <th className="px-4 py-4 border-r border-gray-700/50">Tanggal (Y-M-D)</th>
-                  <th className="px-4 py-4 border-r border-gray-700/50">Mgg/Thn</th>
-                  <th className="px-4 py-4 border-r border-gray-700/50 text-right">Jumlah Terjual</th>
+                  <th className="px-4 py-4 border-r border-gray-200 dark:border-gray-700/50">No</th>
+                  <th className="px-4 py-4 border-r border-gray-200 dark:border-gray-700/50">ID Transaksi</th>
+                  <th className="px-4 py-4 border-r border-gray-200 dark:border-gray-700/50">Tanggal (Y-M-D)</th>
+                  <th className="px-4 py-4 border-r border-gray-200 dark:border-gray-700/50">Mgg/Thn</th>
+                  <th className="px-4 py-4 border-r border-gray-200 dark:border-gray-700/50 text-right">Jumlah Terjual</th>
                   <th className="px-4 py-4 text-center">Waktu Input</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800/50">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-800/50">
                 {displayedData.map((item, index) => (
                   <motion.tr 
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.05 }}
-                    whileHover={{ backgroundColor: 'rgba(55, 65, 81, 0.5)', scale: 1.01, zIndex: 10, position: 'relative' }}
+                    whileHover={{ backgroundColor: isDarkMode ? 'rgba(55, 65, 81, 0.5)' : 'rgba(243, 244, 246, 0.8)', scale: 1.01, zIndex: 10, position: 'relative' }}
                     key={index} 
-                    className="hover:bg-gray-800/40 transition-all duration-200 group origin-left cursor-default border-b border-gray-800/50"
+                    className="hover:bg-gray-100 dark:hover:bg-gray-800/40 transition-all duration-200 group origin-left cursor-default border-b border-gray-200 dark:border-gray-800/50"
                   >
-                    <td className="px-4 py-3 border-r border-gray-700/30 text-gray-500 group-hover:text-gray-300 transition-colors">{(currentPage - 1) * (rowsPerPage === 'all' ? 0 : rowsPerPage) + index + 1}</td>
-                    <td className="px-4 py-3 border-r border-gray-700/30 font-medium text-gray-400 group-hover:text-white transition-colors">{item.id}</td>
-                    <td className="px-4 py-3 border-r border-gray-700/30 text-accent font-bold group-hover:text-white transition-colors">{item.sale_date}</td>
-                    <td className="px-4 py-3 border-r border-gray-700/30 text-xs text-gray-500 group-hover:text-gray-300 transition-colors">M{item.week} / {item.year}</td>
-                    <td className="px-4 py-3 border-r border-gray-700/30 text-right text-accent font-bold group-hover:text-white transition-colors">
+                    <td className="px-4 py-3 border-r border-gray-200 dark:border-gray-700/30 text-gray-400 dark:text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-300 transition-colors">{(currentPage - 1) * (rowsPerPage === 'all' ? 0 : rowsPerPage) + index + 1}</td>
+                    <td className="px-4 py-3 border-r border-gray-200 dark:border-gray-700/30 font-medium text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">{item.id}</td>
+                    <td className="px-4 py-3 border-r border-gray-200 dark:border-gray-700/30 text-accent font-bold group-hover:text-gray-900 dark:group-hover:text-white transition-colors">{item.sale_date}</td>
+                    <td className="px-4 py-3 border-r border-gray-200 dark:border-gray-700/30 text-xs text-gray-400 dark:text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-300 transition-colors">M{item.week} / {item.year}</td>
+                    <td className="px-4 py-3 border-r border-gray-200 dark:border-gray-700/30 text-right text-accent font-bold group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
                       {item.tickets_sold.toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-center text-xs text-gray-500 italic">
@@ -639,7 +668,7 @@ const Dashboard = () => {
             <button 
               disabled={currentPage === 1}
               onClick={() => setCurrentPage(prev => prev - 1)}
-              className="px-3 py-1 bg-gray-800 text-gray-400 rounded-lg hover:bg-gray-700 disabled:opacity-30 text-xs"
+              className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-xs"
             >
               Prev
             </button>
@@ -647,7 +676,7 @@ const Dashboard = () => {
             <button 
               disabled={currentPage === totalPages}
               onClick={() => setCurrentPage(prev => prev + 1)}
-              className="px-3 py-1 bg-gray-800 text-gray-400 rounded-lg hover:bg-gray-700 disabled:opacity-30 text-xs"
+              className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-xs"
             >
               Next
             </button>

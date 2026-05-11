@@ -1,25 +1,35 @@
 export const getDummyTickets = () => {
   const dummy = [];
-  const startYear = 2023;
-  let week = 1;
-  let year = startYear;
+  const startYear = 2022;
+  const totalWeeks = 200;
+  
+  // Base date for sale_date (approx 4 years ago)
+  const baseDate = new Date();
+  baseDate.setDate(baseDate.getDate() - (totalWeeks * 7));
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < totalWeeks; i++) {
+    const currentWeekDate = new Date(baseDate.getTime() + (i * 7 * 24 * 60 * 60 * 1000));
+    const week = Math.floor(i % 52) + 1;
+    const year = startYear + Math.floor(i / 52);
+    
+    // Stable but realistic pattern: Growth + Seasonality
+    // Use i as seed to make it stable
+    const growth = i * 0.5; // Upward trend
+    const seasonality = Math.sin(i / 4) * 50; // Periodic peaks
+    const noise = (Math.sin(i * 1.5) * 10); // Stable "randomness"
+    
+    const sold = Math.floor(200 + growth + seasonality + noise);
+
     dummy.push({
-      id: `W${week}Y${year}`,
+      id: `TRX-${1000 + i}`,
       week: week.toString(),
       year: year.toString(),
-      tickets_sold: Math.floor(Math.random() * (500 - 200 + 1)) + 200,
-      created_at: new Date(Date.now() - (i * 7 * 24 * 60 * 60 * 1000)).toISOString()
+      sale_date: currentWeekDate.toISOString().split('T')[0],
+      tickets_sold: Math.max(50, sold),
+      created_at: new Date().toISOString()
     });
-    
-    week++;
-    if (week > 52) {
-      week = 1;
-      year++;
-    }
   }
-  return dummy.reverse();
+  return dummy; // Already in chronological order
 };
 
 export const getDummyHistory = () => {

@@ -33,11 +33,11 @@ const AccordionItem = ({ title, isOpen, onToggle, children, icon: Icon }) => (
   <div className="border border-gray-700/50 rounded-lg mb-3 overflow-hidden glass-panel">
     <button 
       onClick={onToggle}
-      className="w-full flex items-center justify-between p-4 bg-gray-800/20 hover:bg-gray-800/40 transition-colors"
+      className="w-full flex items-center justify-between p-4 bg-gray-100 dark:bg-gray-800/20 hover:bg-gray-200 dark:hover:bg-gray-800/40 transition-colors"
     >
       <div className="flex items-center gap-3">
         {Icon && <Icon size={18} className="text-primary" />}
-        <span className="font-semibold text-gray-200">{title}</span>
+        <span className="font-semibold text-gray-700 dark:text-gray-200">{title}</span>
       </div>
       {isOpen ? <ChevronUp size={20} className="text-gray-500" /> : <ChevronDown size={20} className="text-gray-500" />}
     </button>
@@ -92,11 +92,19 @@ const LstmProcess = () => {
     fetchHistory();
   }, []);
 
+
+
   const displayedHistory = rowsPerPage === 'all' 
     ? history 
     : history.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
   const totalPages = rowsPerPage === 'all' ? 1 : Math.ceil(history.length / rowsPerPage);
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+  }, [history, rowsPerPage, totalPages]);
 
   // Pagination for Normalization
   const displayedNorm = !results.normalized ? [] : (normRowsPerPage === 'all' 
@@ -168,16 +176,23 @@ const LstmProcess = () => {
   };
 
   const fetchHistory = async () => {
+    let dbHistory = [];
     try {
       const response = await api.get('/data/predictions.php');
       if (response.data.status === 'success') {
-        setHistory(response.data.data);
-      } else {
-        throw new Error('Network error');
+        dbHistory = response.data.data;
       }
     } catch (error) {
-      console.warn('Using dummy history');
-      setHistory(getDummyHistory());
+      console.warn('DB History error, using dummy as base');
+      dbHistory = getDummyHistory();
+    }
+
+    // Gabungkan dengan Offline History dari LocalStorage
+    try {
+      const offlineHistory = JSON.parse(localStorage.getItem('swa-offline-history') || '[]');
+      setHistory([...offlineHistory, ...dbHistory]);
+    } catch (e) {
+      setHistory(dbHistory);
     }
   };
 
@@ -285,27 +300,52 @@ const LstmProcess = () => {
   const handleSaveToDatabase = async () => {
     if (!results || !results.metrics) return;
     
+    const payload = {
+      epochs: params.epochs,
+      learningRate: params.learningRate,
+      windowSize: params.windowSize,
+      metrics: results.metrics,
+      dates: results.dates,
+      actuals: results.actuals,
+      predictions: results.predictions,
+      normalized: results.normalized,
+      min: results.min,
+      max: results.max,
+      manualCalculation: results.manualCalculation,
+      forecast: results.forecast
+    };
+
     try {
       toast.loading('Menyimpan ke database...', { id: 'save-db' });
-      await api.post('/data/predictions.php', {
-        epochs: params.epochs,
-        learningRate: params.learningRate,
-        windowSize: params.windowSize,
-        metrics: results.metrics,
-        dates: results.dates,
-        actuals: results.actuals,
-        predictions: results.predictions,
-        normalized: results.normalized,
-        min: results.min,
-        max: results.max,
-        manualCalculation: results.manualCalculation,
-        forecast: results.forecast
-      });
+      await api.post('/data/predictions.php', payload);
       fetchHistory();
       toast.success('Hasil prediksi berhasil disimpan ke riwayat! ✅', { id: 'save-db' });
     } catch (dbError) {
       console.error('DB Save Error:', dbError);
-      toast.error('Gagal menyimpan ke database. Sistem dalam mode Offline.', { id: 'save-db' });
+      
+      // Fallback: Simpan ke LocalStorage
+      try {
+        const offlineHistory = JSON.parse(localStorage.getItem('swa-offline-history') || '[]');
+        const newRecord = {
+          id: `OFF-${Date.now()}`,
+          run_date: new Date().toISOString(),
+          epochs: params.epochs,
+          learning_rate: params.learningRate,
+          window_size: params.windowSize,
+          mape: results.metrics.mape,
+          rmse: results.metrics.rmse,
+          mse: results.metrics.mse,
+          results_json: payload, // Full payload as result
+          is_offline: true
+        };
+        offlineHistory.unshift(newRecord);
+        localStorage.setItem('swa-offline-history', JSON.stringify(offlineHistory.slice(0, 50))); // Keep last 50
+        
+        fetchHistory(); 
+        toast.success('Database terputus. Data disimpan sementara di browser (Mode Offline).', { id: 'save-db' });
+      } catch (lsError) {
+        toast.error('Gagal menyimpan data (Penyimpanan browser penuh).', { id: 'save-db' });
+      }
     }
   };
 
@@ -511,23 +551,23 @@ const LstmProcess = () => {
       {/* Header & Controls */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div className="flex items-center gap-4">
-          <div className={`p-4 rounded-3xl ${status === 'training' ? 'bg-primary/20 animate-pulse' : 'bg-gray-800'} shadow-2xl border border-white/5`}>
+          <div className={`p-4 rounded-3xl ${status === 'training' ? 'bg-primary/20 animate-pulse' : 'bg-gray-100 dark:bg-gray-800'} shadow-2xl border border-gray-200 dark:border-white/5`}>
             <BrainCircuit className={status === 'training' ? 'text-primary' : 'text-gray-500'} size={32} />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
               Neural Engine
               <span className={`text-[10px] px-2 py-0.5 rounded-full border ${status === 'training' ? 'border-primary text-primary bg-primary/10 animate-pulse' : 'border-gray-700 text-gray-500'} uppercase font-black tracking-widest`}>
                 {status === 'training' ? 'Processing' : status === 'success' ? 'Ready' : 'Idle'}
               </span>
             </h1>
-            <p className="text-gray-400 text-sm">Long Short-Term Memory Prediction Pipeline</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">Long Short-Term Memory Prediction Pipeline</p>
           </div>
         </div>
         
         <div className="flex items-center gap-3 print:hidden">
           {/* Stepper (Desktop Only) */}
-          <div className="hidden lg:flex items-center gap-4 mr-6 bg-black/20 px-6 py-3 rounded-2xl border border-white/5">
+          <div className="hidden lg:flex items-center gap-4 mr-6 bg-gray-100 dark:bg-black/20 px-6 py-3 rounded-2xl border border-gray-200 dark:border-white/5">
             {[
               { label: 'Input', active: true },
               { label: 'Train', active: status === 'training' || status === 'success' },
@@ -535,15 +575,15 @@ const LstmProcess = () => {
             ].map((step, i) => (
               <div key={i} className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${step.active ? 'bg-primary shadow-[0_0_8px_#3b82f6]' : 'bg-gray-700'}`}></div>
-                <span className={`text-[9px] font-black uppercase tracking-widest ${step.active ? 'text-white' : 'text-gray-600'}`}>{step.label}</span>
-                {i < 2 && <div className="w-4 h-[1px] bg-gray-800 ml-2"></div>}
+                <span className={`text-[9px] font-black uppercase tracking-widest ${step.active ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-600'}`}>{step.label}</span>
+                {i < 2 && <div className="w-4 h-[1px] bg-gray-300 dark:bg-gray-800 ml-2"></div>}
               </div>
             ))}
           </div>
 
           <button 
             onClick={() => setShowConfig(!showConfig)} 
-            className="p-3 bg-gray-800 text-gray-400 rounded-2xl hover:bg-gray-700 hover:text-white transition-all border border-white/5"
+            className="p-3 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-2xl hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-all border border-gray-200 dark:border-white/5"
             title="Konfigurasi Model"
           >
             <Settings size={20} />
@@ -552,7 +592,7 @@ const LstmProcess = () => {
           {status === 'success' && (
             <button 
               onClick={() => setIsSandbox(!isSandbox)} 
-              className={`px-4 py-2 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border ${isSandbox ? 'bg-amber-500/20 border-amber-500 text-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'bg-gray-800 border-white/5 text-gray-500 hover:text-gray-300'}`}
+              className={`px-4 py-2 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border ${isSandbox ? 'bg-amber-500/20 border-amber-500 text-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-white/5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
             >
               {isSandbox ? 'Sandbox Active' : 'Enter Sandbox'}
             </button>
@@ -574,12 +614,12 @@ const LstmProcess = () => {
       {showConfig && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="glass-panel p-8 max-w-md w-full border-primary/20">
-            <h2 className="text-xl font-bold text-white mb-6">Konfigurasi Model LSTM</h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">Konfigurasi Model LSTM</h2>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <label className="block text-sm text-gray-400">Epochs (1-300)</label>
+                    <label className="block text-sm text-gray-500 dark:text-gray-400">Epochs (1-300)</label>
                     <Tooltip text="Jumlah iterasi pelatihan model. Semakin tinggi biasanya semakin akurat tapi butuh waktu lebih lama.">
                       <Info size={12} className="text-gray-600 hover:text-primary cursor-help" />
                     </Tooltip>
@@ -587,27 +627,27 @@ const LstmProcess = () => {
                   <input type="number" min="1" max="300" className="input-field" value={params.epochs} onChange={e => setParams({...params, epochs: Math.min(300, parseInt(e.target.value) || 1)})} />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Learning Rate</label>
+                  <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">Learning Rate</label>
                   <input type="number" step="0.001" className="input-field" value={params.learningRate} onChange={e => setParams({...params, learningRate: parseFloat(e.target.value)})} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Window Size (1-8)</label>
+                  <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">Window Size (1-8)</label>
                   <input type="number" min="1" max="8" className="input-field" value={params.windowSize} onChange={e => setParams({...params, windowSize: Math.min(8, parseInt(e.target.value) || 1)})} />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">EMA Period</label>
+                  <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">EMA Period</label>
                   <input type="number" min="1" max="20" className="input-field" value={params.emaPeriod} onChange={e => setParams({...params, emaPeriod: parseInt(e.target.value) || 1})} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Forecast (Weeks)</label>
+                  <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">Forecast (Weeks)</label>
                   <input type="number" min="1" max="12" className="input-field" value={params.forecastSteps} onChange={e => setParams({...params, forecastSteps: Math.min(12, parseInt(e.target.value) || 1)})} />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Sales Target</label>
+                  <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">Sales Target</label>
                   <input type="number" className="input-field" value={params.salesTarget} onChange={e => setParams({...params, salesTarget: parseInt(e.target.value) || 0})} />
                 </div>
               </div>
@@ -655,7 +695,7 @@ const LstmProcess = () => {
                 </div>
 
                 <div className="lg:col-span-1 text-center">
-                  <h3 className="text-2xl font-bold text-white mb-2">Training Phase</h3>
+                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Training Phase</h3>
                   <p className="text-gray-400 mb-6 font-mono text-sm uppercase tracking-widest">Epoch {progress.epoch} / {params.epochs}</p>
                   
                   <div className="bg-black/40 rounded-2xl p-4 font-mono text-[10px] text-left h-32 overflow-y-auto custom-scrollbar border border-white/5">
@@ -735,7 +775,7 @@ const LstmProcess = () => {
                           </span>
                         </Tooltip>
                       </div>
-                      <h4 className="text-3xl font-black text-white tabular-nums mb-1">{metric.value}</h4>
+                      <h4 className="text-3xl font-black text-gray-900 dark:text-white tabular-nums mb-1">{metric.value}</h4>
                       <p className="text-[10px] text-gray-500 italic">{metric.desc}</p>
                     </div>
                   </motion.div>
@@ -854,7 +894,7 @@ const LstmProcess = () => {
               <div className="space-y-4">
                 <AccordionItem title="1. Normalisasi Min-Max" isOpen={openAccordion === 'norm'} onToggle={() => setOpenAccordion(openAccordion === 'norm' ? '' : 'norm')}>
                   <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 mb-4">
-                    <p className="text-xs text-gray-300 leading-relaxed">
+                    <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
                       <strong className="text-primary">Mengapa Normalisasi?</strong> LSTM sangat sensitif terhadap skala data. Kita mengubah data asli menjadi skala <code className="text-accent">0 sampai 1</code> menggunakan rumus: <br/>
                       <span className="font-mono text-[10px] mt-2 block bg-black/30 p-2 rounded text-center">x_norm = (x - {results.min || 'min'}) / ({results.max || 'max'} - {results.min || 'min'})</span>
                     </p>
@@ -869,7 +909,7 @@ const LstmProcess = () => {
                           setNormRowsPerPage(e.target.value === 'all' ? 'all' : parseInt(e.target.value));
                           setNormCurrentPage(1);
                         }}
-                        className="bg-gray-800 border border-gray-700 text-gray-400 rounded px-1 py-0.5 outline-none focus:border-primary"
+                        className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded px-1 py-0.5 outline-none focus:border-primary"
                       >
                         <option value={5}>5</option>
                         <option value={10}>10</option>
@@ -882,10 +922,10 @@ const LstmProcess = () => {
                     </div>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-gray-300">
-                      <thead className="text-xs uppercase bg-gray-800">
+                    <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
+                      <thead className="text-xs uppercase bg-gray-100 dark:bg-gray-800">
                         <tr>
-                          <th className="px-4 py-2 border-x border-gray-700/50">Periode</th>
+                          <th className="px-4 py-2 border-x border-gray-300 dark:border-gray-700/50">Periode</th>
                           <th className="px-4 py-2 border-x border-gray-700/50">Aktual</th>
                           <th className="px-4 py-2 border-x border-gray-700/50 text-accent">Norm</th>
                           <th className="px-4 py-2 border-x border-gray-700/50 text-blue-400">MA3</th>
@@ -914,7 +954,7 @@ const LstmProcess = () => {
                       <button 
                         disabled={normCurrentPage === 1}
                         onClick={() => setNormCurrentPage(prev => prev - 1)}
-                        className="px-2 py-0.5 bg-gray-800 text-gray-400 rounded hover:bg-gray-700 disabled:opacity-30 text-[10px] uppercase font-bold"
+                        className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-[10px] uppercase font-bold"
                       >
                         Prev
                       </button>
@@ -922,7 +962,7 @@ const LstmProcess = () => {
                       <button 
                         disabled={normCurrentPage === normTotalPages}
                         onClick={() => setNormCurrentPage(prev => prev + 1)}
-                        className="px-2 py-0.5 bg-gray-800 text-gray-400 rounded hover:bg-gray-700 disabled:opacity-30 text-[10px] uppercase font-bold"
+                        className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-[10px] uppercase font-bold"
                       >
                         Next
                       </button>
@@ -1013,7 +1053,7 @@ const LstmProcess = () => {
 
                 <AccordionItem title="3. Hasil Prediksi vs Aktual" isOpen={openAccordion === 'results'} onToggle={() => setOpenAccordion(openAccordion === 'results' ? '' : 'results')}>
                   <div className="bg-accent/5 border border-accent/20 rounded-xl p-4 mb-4">
-                    <p className="text-xs text-gray-300 leading-relaxed">
+                    <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
                       <strong className="text-accent">Analisis Komparasi:</strong> Tabel ini membandingkan data <span className="text-white font-bold">Aktual</span> (kenyataan) dengan hasil <span className="text-primary font-bold">Prediksi</span> sistem. 
                       Baris bertanda <span className="text-primary">biru</span> di bagian bawah adalah <strong className="text-primary">Proyeksi Masa Depan</strong> yang belum memiliki data aktual.
                     </p>
@@ -1027,7 +1067,7 @@ const LstmProcess = () => {
                           setPredRowsPerPage(e.target.value === 'all' ? 'all' : parseInt(e.target.value));
                           setPredCurrentPage(1);
                         }}
-                        className="bg-gray-800 border border-gray-700 text-gray-400 rounded px-1 py-0.5 outline-none focus:border-primary"
+                        className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded px-1 py-0.5 outline-none focus:border-primary"
                       >
                         <option value={5}>5</option>
                         <option value={10}>10</option>
@@ -1040,27 +1080,27 @@ const LstmProcess = () => {
                     </div>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-gray-300">
-                      <thead className="text-xs uppercase bg-gray-800">
+                    <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
+                      <thead className="text-xs uppercase bg-gray-100 dark:bg-gray-800">
                         <tr>
-                          <th className="px-4 py-2 border-r border-gray-700">No</th>
-                          <th className="px-4 py-2 border-r border-gray-700">Periode</th>
-                          <th className="px-4 py-2 border-r border-gray-700 text-right">Aktual</th>
-                          <th className="px-4 py-2 border-r border-gray-700 text-right">Prediksi</th>
+                          <th className="px-4 py-2 border-r border-gray-300 dark:border-gray-700">No</th>
+                          <th className="px-4 py-2 border-r border-gray-300 dark:border-gray-700">Periode</th>
+                          <th className="px-4 py-2 border-r border-gray-300 dark:border-gray-700 text-right">Aktual</th>
+                          <th className="px-4 py-2 border-r border-gray-300 dark:border-gray-700 text-right">Prediksi</th>
                           <th className="px-4 py-2 text-right">Selisih</th>
                         </tr>
                       </thead>
                       <tbody>
                         {displayedPred.map((p, i) => (
-                          <tr key={i} className={`border-b border-gray-700 ${p.type === 'forecast' ? 'bg-primary/5' : ''}`}>
-                            <td className={`px-4 py-2 border-r border-gray-700 ${p.type === 'forecast' ? 'text-primary font-bold' : ''}`}>{p.index}</td>
-                            <td className={`px-4 py-2 border-r border-gray-700 ${p.type === 'forecast' ? 'text-primary' : ''}`}>
+                          <tr key={i} className={`border-b border-gray-200 dark:border-gray-700 ${p.type === 'forecast' ? 'bg-primary/5' : ''}`}>
+                            <td className={`px-4 py-2 border-r border-gray-200 dark:border-gray-700 ${p.type === 'forecast' ? 'text-primary font-bold' : ''}`}>{p.index}</td>
+                            <td className={`px-4 py-2 border-r border-gray-200 dark:border-gray-700 ${p.type === 'forecast' ? 'text-primary' : ''}`}>
                               {isSandbox && p.type === 'actual' ? (
                                 <input 
                                   type="text" 
                                   value={p.date} 
                                   onChange={(e) => handleUpdateDate(p.index - 1, e.target.value)}
-                                  className="w-24 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-0.5 text-white outline-none focus:border-amber-500"
+                                  className="w-24 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-0.5 text-gray-900 dark:text-white outline-none focus:border-amber-500"
                                 />
                               ) : p.date}
                             </td>
@@ -1090,7 +1130,7 @@ const LstmProcess = () => {
                       <button 
                         disabled={predCurrentPage === 1}
                         onClick={() => setPredCurrentPage(prev => prev - 1)}
-                        className="px-2 py-0.5 bg-gray-800 text-gray-400 rounded hover:bg-gray-700 disabled:opacity-30 text-[10px] uppercase font-bold"
+                        className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-[10px] uppercase font-bold"
                       >
                         Prev
                       </button>
@@ -1098,7 +1138,7 @@ const LstmProcess = () => {
                       <button 
                         disabled={predCurrentPage === predTotalPages}
                         onClick={() => setPredCurrentPage(prev => prev + 1)}
-                        className="px-2 py-0.5 bg-gray-800 text-gray-400 rounded hover:bg-gray-700 disabled:opacity-30 text-[10px] uppercase font-bold"
+                        className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-[10px] uppercase font-bold"
                       >
                         Next
                       </button>
@@ -1129,15 +1169,15 @@ const LstmProcess = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
                 <div className="glass-panel p-6 border border-red-500/30">
                   <h4 className="text-gray-400 text-xs uppercase tracking-widest">MSE</h4>
-                  <p className="text-2xl font-bold text-white mt-1">{results.metrics.mse}</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{results.metrics.mse}</p>
                 </div>
                 <div className="glass-panel p-6 border border-orange-500/30">
                   <h4 className="text-gray-400 text-xs uppercase tracking-widest">RMSE</h4>
-                  <p className="text-2xl font-bold text-white mt-1">{results.metrics.rmse}</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{results.metrics.rmse}</p>
                 </div>
                 <div className="glass-panel p-6 border border-green-500/30">
                   <h4 className="text-gray-400 text-xs uppercase tracking-widest">MAPE</h4>
-                  <p className="text-2xl font-bold text-white mt-1">{results.metrics.mape}%</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{results.metrics.mape}%</p>
                 </div>
               </div>
 
@@ -1149,10 +1189,10 @@ const LstmProcess = () => {
                   {results.importance && results.importance.map((f, idx) => (
                     <div key={idx} className="space-y-2">
                       <div className="flex justify-between text-xs">
-                        <span className="text-gray-300">{f.name}</span>
+                        <span className="text-gray-600 dark:text-gray-300">{f.name}</span>
                         <span className="text-primary font-bold">{f.value.toFixed(1)}%</span>
                       </div>
-                      <div className="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                      <div className="w-full bg-gray-200 dark:bg-gray-800 h-2 rounded-full overflow-hidden">
                         <motion.div 
                           initial={{ width: 0 }}
                           animate={{ width: `${f.value}%` }}
@@ -1175,12 +1215,12 @@ const LstmProcess = () => {
               key="idle"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="glass-panel p-16 text-center border-dashed border-2 border-gray-700 bg-gray-800/10"
+              className="glass-panel p-16 text-center border-dashed border-2 border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/10"
             >
-              <div className="p-6 bg-gray-800/50 w-fit rounded-full mx-auto mb-6">
-                <BrainCircuit size={64} className="text-gray-700" />
+              <div className="p-6 bg-gray-200 dark:bg-gray-800/50 w-fit rounded-full mx-auto mb-6">
+                <BrainCircuit size={64} className="text-gray-900 dark:text-gray-700" />
               </div>
-              <h3 className="text-2xl font-bold text-gray-400 mb-2">Sistem Siap</h3>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-400 mb-2">Sistem Siap</h3>
               <p className="text-sm text-gray-600 max-w-md mx-auto">Konfigurasikan parameter dan mulai proses prediksi untuk melihat hasil.</p>
             </motion.div>
           )}
@@ -1190,7 +1230,7 @@ const LstmProcess = () => {
         {status !== 'training' && (
           <div className="mt-12 print:hidden">
             <div className="flex justify-between items-center mb-4 px-2">
-               <h3 className="text-sm font-bold text-gray-500 uppercase tracking-[0.2em] flex items-center gap-2">
+               <h3 className="text-sm font-bold text-gray-700 dark:text-gray-500 uppercase tracking-[0.2em] flex items-center gap-2">
                  <Calendar size={16} className="text-primary" /> Riwayat Prediksi
                </h3>
                <div className="flex items-center gap-4">
@@ -1202,7 +1242,7 @@ const LstmProcess = () => {
                         setRowsPerPage(e.target.value === 'all' ? 'all' : parseInt(e.target.value));
                         setCurrentPage(1);
                       }}
-                      className="bg-gray-800 border border-gray-700 text-gray-400 rounded px-2 py-1 outline-none focus:border-primary"
+                      className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded px-2 py-1 outline-none focus:border-primary"
                     >
                       <option value={5}>5</option>
                       <option value={10}>10</option>
@@ -1225,16 +1265,16 @@ const LstmProcess = () => {
                          }
                        });
                      }}
-                     className="text-[10px] text-red-400 hover:text-red-300 transition-colors uppercase font-bold tracking-widest bg-red-500/5 px-3 py-1 rounded-full border border-red-500/10"
+                     className="text-[10px] text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors uppercase font-bold tracking-widest bg-red-500/5 px-3 py-1 rounded-full border border-red-500/10"
                    >
                      Clear All
                    </button>
                  )}
                </div>
             </div>
-            <div className="overflow-x-auto glass-panel rounded-xl border-gray-700/50">
-                <table className="w-full text-sm text-left text-gray-400">
-                  <thead className="text-xs uppercase bg-gray-800/80">
+            <div className="overflow-x-auto glass-panel rounded-2xl border-gray-100 dark:border-gray-700/50">
+                <table className="w-full text-sm text-left text-gray-700 dark:text-gray-400">
+                  <thead className="text-xs uppercase bg-gray-100 dark:bg-gray-800/80 text-gray-600 dark:text-gray-300">
                     <tr>
                       <th className="px-4 py-3 text-center">Aksi</th>
                       <th className="px-4 py-3">Tanggal Run</th>
@@ -1245,11 +1285,11 @@ const LstmProcess = () => {
                   </thead>
                   <tbody>
                     {displayedHistory.length > 0 ? displayedHistory.map((h, i) => (
-                      <tr key={i} className="border-b border-gray-700/30 hover:bg-gray-800/40 transition-colors">
+                      <tr key={i} className="border-b border-gray-200 dark:border-gray-700/30 hover:bg-gray-100 dark:hover:bg-gray-800/40 transition-colors">
                         <td className="px-4 py-3 text-center">
                           <div className="flex items-center justify-center gap-2">
-                            <button onClick={() => handleViewHistory(h)} className="p-2 bg-primary/10 text-primary rounded-lg hover:bg-primary hover:text-white transition-all" title="Lihat Detail">
-                              <Eye size={14} />
+                            <button onClick={() => handleViewHistory(h)} className="p-2.5 bg-primary/5 text-primary rounded-xl hover:bg-primary hover:text-white transition-all shadow-sm border border-primary/5" title="Lihat Detail">
+                              <Eye size={16} />
                             </button>
                             <button 
                               onClick={() => {
@@ -1265,21 +1305,21 @@ const LstmProcess = () => {
                                   }
                                 });
                               }}
-                              className="p-2 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500 hover:text-white transition-all"
+                              className="p-2.5 bg-red-500/5 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all shadow-sm border border-red-500/5"
                             >
                               <Trash2 size={14} />
                             </button>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-xs flex items-center gap-2">
+                        <td className="px-4 py-3 text-xs font-medium text-gray-900 dark:text-gray-200 flex items-center gap-2">
                           {new Date(h.run_date).toLocaleString('id-ID')}
                           {h.results_json.includes('"status":"warning"') && (
                             <AlertCircle size={14} className="text-amber-500" title="Data mengandung anomali" />
                           )}
                         </td>
-                        <td className="px-4 py-3 text-[10px] text-gray-500">{h.epochs} Ep / {h.window_size} W</td>
+                        <td className="px-4 py-3 text-[10px] text-gray-600 dark:text-gray-500">{h.epochs} Ep / {h.window_size} W</td>
                         <td className="px-4 py-3 text-center text-green-400 font-bold">{parseFloat(h.mape).toFixed(2)}%</td>
-                        <td className="px-4 py-3 text-center text-accent">{parseFloat(h.rmse).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-center text-cyan-600 dark:text-accent font-medium">{parseFloat(h.rmse).toFixed(2)}</td>
                       </tr>
                     )) : (
                       <tr><td colSpan="5" className="px-4 py-8 text-center text-gray-600 italic">Belum ada riwayat.</td></tr>
@@ -1293,7 +1333,7 @@ const LstmProcess = () => {
                   <button 
                     disabled={currentPage === 1}
                     onClick={() => setCurrentPage(prev => prev - 1)}
-                    className="px-3 py-1 bg-gray-800 text-gray-400 rounded-lg hover:bg-gray-700 disabled:opacity-30 text-[10px] font-bold uppercase tracking-widest"
+                    className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-[10px] font-bold uppercase tracking-widest"
                   >
                     Prev
                   </button>
@@ -1301,7 +1341,7 @@ const LstmProcess = () => {
                   <button 
                     disabled={currentPage === totalPages}
                     onClick={() => setCurrentPage(prev => prev + 1)}
-                    className="px-3 py-1 bg-gray-800 text-gray-400 rounded-lg hover:bg-gray-700 disabled:opacity-30 text-[10px] font-bold uppercase tracking-widest"
+                    className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-[10px] font-bold uppercase tracking-widest"
                   >
                     Next
                   </button>
@@ -1327,7 +1367,7 @@ const LstmProcess = () => {
                 {confirmConfig.type === 'danger' ? <Trash2 size={32} /> : <BrainCircuit size={32} />}
               </div>
               
-              <h3 className="text-xl font-bold text-white mb-2">{confirmConfig.title}</h3>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{confirmConfig.title}</h3>
               <p className="text-gray-400 text-sm mb-8 leading-relaxed">
                 {confirmConfig.message}
               </p>
@@ -1335,7 +1375,7 @@ const LstmProcess = () => {
               <div className="flex gap-3">
                 <button 
                   onClick={() => setConfirmConfig({ ...confirmConfig, show: false })}
-                  className="flex-1 px-4 py-3 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl font-bold transition-all"
+                  className="flex-1 px-4 py-3 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold transition-all"
                 >
                   Batal
                 </button>

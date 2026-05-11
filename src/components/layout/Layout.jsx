@@ -1,5 +1,5 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
-import { PlaneTakeoff, LayoutDashboard, Database, BrainCircuit, FileText, User, LogOut, Loader2 } from 'lucide-react';
+import { PlaneTakeoff, LayoutDashboard, Database, BrainCircuit, FileText, User, LogOut, Loader2, Sun, Moon } from 'lucide-react'; // Tambah icon Sun & Moon
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 
@@ -7,6 +7,7 @@ const Layout = ({ user, setUser }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isPageLoading, setIsPageLoading] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
 
   useEffect(() => {
     setIsPageLoading(true);
@@ -16,6 +17,24 @@ const Layout = ({ user, setUser }) => {
 
     return () => clearTimeout(timer);
   }, [location.pathname]);
+
+  // Set state awal berdasarkan class HTML
+  useEffect(() => {
+    setIsDarkMode(document.documentElement.classList.contains('dark'));
+  }, []);
+
+  // Fungsi pergantian tema
+  const toggleTheme = () => {
+    if (isDarkMode) {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+      setIsDarkMode(false);
+    } else {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+      setIsDarkMode(true);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -33,47 +52,41 @@ const Layout = ({ user, setUser }) => {
   ];
 
   return (
-    <div className="flex h-screen bg-background text-gray-100 overflow-hidden">
+    <div className="flex h-screen bg-background text-gray-800 dark:text-gray-100 overflow-hidden transition-colors duration-300">
       {/* Sidebar */}
       <motion.aside 
         initial={{ x: -300 }}
         animate={{ x: 0 }}
         transition={{ type: "spring", stiffness: 100, damping: 20 }}
-        className="w-64 glass-panel border-l-0 border-t-0 border-b-0 rounded-none flex flex-col z-20 relative"
+        className="w-72 bg-white dark:bg-surface/80 backdrop-blur-xl border-r border-gray-100 dark:border-gray-800 rounded-none flex flex-col z-20 relative"
       >
-        <div className="p-6 flex items-center gap-3">
-          <motion.div 
-            whileHover={{ rotate: 15, scale: 1.1 }}
-            className="p-2 bg-primary/20 text-primary rounded-xl shadow-lg shadow-primary/20"
-          >
-            <PlaneTakeoff size={24} />
-          </motion.div>
-          <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent">SWA Predict</h1>
+        <div className="p-8 flex items-center gap-4">
+          <div className="p-2.5 bg-primary/10 text-primary rounded-2xl shadow-inner border border-primary/10">
+            <PlaneTakeoff size={28} />
+          </div>
+          <h1 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent tracking-tighter">SWA Predict</h1>
         </div>
         
-        <div className="px-6 py-4 border-b border-gray-700/50">
-          <p className="text-sm text-gray-400">Selamat datang,</p>
-          <p className="font-semibold text-gray-100 truncate text-lg">{user?.name}</p>
+        <div className="mx-6 p-4 rounded-2xl border border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-transparent mb-4">
+          <p className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-1">Status Sesi</p>
+          <p className="font-black text-gray-900 dark:text-gray-100 truncate text-base">{user?.name || 'Administrator'}</p>
         </div>
 
         <nav className="flex-1 py-6 px-4 space-y-2">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
             return (
-              <Link
-                key={item.path}
-                to={item.path}
-              >
+              <Link key={item.path} to={item.path}>
                 <motion.div
                   whileHover={{ scale: 1.02, x: 5 }}
                   whileTap={{ scale: 0.98 }}
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors duration-200 ${
                     isActive 
                       ? 'bg-gradient-to-r from-primary/20 to-primary/5 text-primary shadow-sm border border-primary/20' 
-                      : 'text-gray-400 hover:bg-gray-800/80 hover:text-gray-200 border border-transparent'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800/80 hover:text-gray-900 dark:hover:text-gray-200 border border-transparent'
                   }`}
                 >
-                  <span className={isActive ? 'text-primary' : 'text-gray-400 group-hover:text-gray-200'}>
+                  <span className={isActive ? 'text-primary' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'}>
                     {item.icon}
                   </span>
                   <span className="font-medium">{item.name}</span>
@@ -83,12 +96,12 @@ const Layout = ({ user, setUser }) => {
           })}
         </nav>
 
-        <div className="p-4 border-t border-gray-700/50">
+        <div className="p-4 border-t border-gray-200 dark:border-gray-700/50">
           <motion.button
             whileHover={{ scale: 1.02, x: 5 }}
             whileTap={{ scale: 0.98 }}
             onClick={handleLogout}
-            className="flex items-center gap-3 w-full px-4 py-3 text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-xl transition-colors"
+            className="flex items-center gap-3 w-full px-4 py-3 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300 rounded-xl transition-colors"
           >
             <LogOut size={20} />
             <span className="font-medium">Keluar</span>
@@ -97,8 +110,22 @@ const Layout = ({ user, setUser }) => {
       </motion.aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto overflow-x-hidden relative">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/5 via-background to-background pointer-events-none"></div>
+      <main className="flex-1 overflow-y-auto overflow-x-hidden relative bg-background transition-colors duration-300">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/5 via-background to-background pointer-events-none transition-colors duration-300"></div>
+        
+        {/* Tombol Toggle Tema di Pojok Kanan Atas */}
+        <div className="absolute top-6 right-8 z-50">
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={toggleTheme}
+            className="p-2.5 rounded-xl bg-surface/80 backdrop-blur-md border border-gray-200 dark:border-gray-700/50 shadow-sm text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary transition-colors"
+            title={isDarkMode ? "Ganti ke Mode Terang" : "Ganti ke Mode Gelap"}
+          >
+            {isDarkMode ? <Sun size={22} className="text-amber-500" /> : <Moon size={22} className="text-slate-600" />}
+          </motion.button>
+        </div>
+
         <div className="relative z-10 p-8 min-h-full">
           <AnimatePresence mode="wait">
             {isPageLoading ? (
@@ -122,7 +149,7 @@ const Layout = ({ user, setUser }) => {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2 }}
-                  className="mt-8 text-xl font-medium text-gray-300 tracking-wider"
+                  className="mt-8 text-xl font-medium text-gray-600 dark:text-gray-300 tracking-wider"
                 >
                   Menyiapkan Halaman...
                 </motion.h2>

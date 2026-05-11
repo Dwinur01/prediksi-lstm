@@ -22,8 +22,13 @@ function App() {
     }
     setLoading(false);
     
-    // Always force dark mode on body/html
-    document.documentElement.classList.add('dark');
+    // Inisialisasi tema dari localStorage
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    if (savedTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
   }, []);
 
   if (loading) return <div className="min-h-screen bg-background flex items-center justify-center text-primary">Loading...</div>;

@@ -18,10 +18,22 @@ const DataInput = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({ show: false, title: '', message: '', onConfirm: null, type: 'danger' });
   const [selectedIds, setSelectedIds] = useState([]);
+  const [isDarkMode, setIsDarkMode] = useState(true);
+
+  useEffect(() => {
+    setIsDarkMode(document.documentElement.classList.contains('dark'));
+    const observer = new MutationObserver(() => {
+      setIsDarkMode(document.documentElement.classList.contains('dark'));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     fetchData();
   }, []);
+
+
 
   const fetchData = async () => {
     try {
@@ -57,6 +69,12 @@ const DataInput = () => {
     : filteredData.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
   const totalPages = rowsPerPage === 'all' ? 1 : Math.ceil(filteredData.length / rowsPerPage);
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+  }, [filteredData, rowsPerPage, totalPages]);
 
   const handleManualSubmit = async (e) => {
     if (e) e.preventDefault();
@@ -220,13 +238,13 @@ const DataInput = () => {
 
   const SkeletonRow = () => (
     <tr className="animate-pulse">
-      <td className="px-4 py-4"><div className="h-4 bg-gray-800 rounded w-4"></div></td>
-      <td className="px-4 py-4"><div className="h-4 bg-gray-800 rounded w-16"></div></td>
-      <td className="px-4 py-4"><div className="h-4 bg-gray-800 rounded w-24"></div></td>
-      <td className="px-4 py-4"><div className="h-4 bg-gray-800 rounded w-12"></div></td>
-      <td className="px-4 py-4 text-right"><div className="h-4 bg-gray-800 rounded w-16 ml-auto"></div></td>
-      <td className="px-4 py-4 text-center"><div className="h-4 bg-gray-800 rounded w-20 mx-auto"></div></td>
-      <td className="px-4 py-4 text-center"><div className="h-4 bg-gray-800 rounded w-12 mx-auto"></div></td>
+      <td className="px-4 py-4"><div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-4"></div></td>
+      <td className="px-4 py-4"><div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-16"></div></td>
+      <td className="px-4 py-4"><div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-24"></div></td>
+      <td className="px-4 py-4"><div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-12"></div></td>
+      <td className="px-4 py-4 text-right"><div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-16 ml-auto"></div></td>
+      <td className="px-4 py-4 text-center"><div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-20 mx-auto"></div></td>
+      <td className="px-4 py-4 text-center"><div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-12 mx-auto"></div></td>
     </tr>
   );
 
@@ -294,8 +312,8 @@ const DataInput = () => {
     >
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Database Penjualan Tiket</h1>
-          <p className="text-gray-400 text-sm">Kelola data historis untuk pelatihan model LSTM</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Database Penjualan Tiket</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">Kelola data historis untuk pelatihan model LSTM</p>
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
@@ -303,7 +321,7 @@ const DataInput = () => {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => setShowImportModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-accent/10 text-accent border border-accent/20 rounded-xl text-sm font-medium hover:bg-accent/20 transition-all"
+            className="flex items-center gap-2 px-5 py-2.5 bg-accent/5 dark:bg-accent/10 text-cyan-600 dark:text-accent border border-accent/20 rounded-xl text-sm font-bold shadow-sm hover:shadow-md transition-all"
           >
             <Upload size={18} /> Import Data
           </motion.button>
@@ -335,18 +353,18 @@ const DataInput = () => {
                 exit={{ opacity: 0, scale: 0.9, y: 30 }}
                 className="glass-panel p-8 max-w-md w-full border-primary/30 shadow-[0_0_50px_rgba(59,130,246,0.15)] relative"
               >
-                <button onClick={cancelEdit} className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors"><X size={24} /></button>
-                <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                <button onClick={cancelEdit} className="absolute top-4 right-4 text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors"><X size={24} /></button>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
                   {isEditing ? <Edit2 size={24} className="text-accent" /> : <Plus size={24} className="text-primary" />}
                   {isEditing ? 'Edit Data Penjualan' : 'Input Data Manual'}
                 </h3>
                 <form onSubmit={handleManualSubmit} className="space-y-6">
                   <div>
-                    <label className="block text-sm text-gray-400 mb-2">ID Transaksi</label>
-                    <input type="text" className="input-field bg-gray-800/50 cursor-not-allowed opacity-60" placeholder={isEditing ? formData.id : "Otomatis..."} value={isEditing ? formData.id : ""} readOnly />
+                    <label className="block text-sm text-gray-500 dark:text-gray-400 mb-2">ID Transaksi</label>
+                    <input type="text" className="input-field bg-gray-100 dark:bg-gray-800/50 cursor-not-allowed opacity-60" placeholder={isEditing ? formData.id : "Otomatis..."} value={isEditing ? formData.id : ""} readOnly />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-400 mb-2">Tanggal Transaksi</label>
+                    <label className="block text-sm text-gray-500 dark:text-gray-400 mb-2">Tanggal Transaksi</label>
                     <input required type="date" className="input-field" value={formData.sale_date} onChange={e => {
                         const dateObj = new Date(e.target.value);
                         if (!isNaN(dateObj.getTime())) {
@@ -360,7 +378,7 @@ const DataInput = () => {
                     {formData.week && <p className="text-xs text-accent mt-2 font-medium">Minggu ke-{formData.week}, {formData.year}</p>}
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-400 mb-2">Jumlah Terjual</label>
+                    <label className="block text-sm text-gray-500 dark:text-gray-400 mb-2">Jumlah Terjual</label>
                     <input required type="number" min="0" className="input-field" placeholder="0" value={formData.tickets_sold} onChange={e => setFormData({...formData, tickets_sold: e.target.value})} />
                   </div>
                   <div className="flex gap-3 pt-4">
@@ -390,16 +408,16 @@ const DataInput = () => {
                 <div className="relative p-8 md:p-10">
                   <button 
                     onClick={() => setShowImportModal(false)} 
-                    className="absolute top-6 right-6 p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-all z-10"
+                    className="absolute top-6 right-6 p-2 text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/10 rounded-full transition-all z-10"
                   >
                     <X size={24} />
                   </button>
                   
                   <div className="mb-10 text-center md:text-left">
-                    <h3 className="text-3xl font-extrabold text-white tracking-tight mb-2">
+                    <h3 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight mb-2">
                       Import Database <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">Penjualan</span>
                     </h3>
-                    <p className="text-gray-400">Pastikan format file Anda sudah sesuai dengan standar sistem.</p>
+                    <p className="text-gray-500 dark:text-gray-400">Pastikan format file Anda sudah sesuai dengan standar sistem.</p>
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -418,7 +436,7 @@ const DataInput = () => {
                         <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400 border border-blue-500/20">
                           <span className="font-bold">01</span>
                         </div>
-                        <h4 className="text-lg font-bold text-white">Persiapan Data</h4>
+                        <h4 className="text-lg font-bold text-gray-900 dark:text-white">Persiapan Data</h4>
                       </div>
 
                       <div className="space-y-5">
@@ -463,19 +481,19 @@ const DataInput = () => {
                         <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center text-accent border border-accent/20">
                           <span className="font-bold">02</span>
                         </div>
-                        <h4 className="text-lg font-bold text-white">Eksekusi Import</h4>
+                        <h4 className="text-lg font-bold text-gray-900 dark:text-white">Eksekusi Import</h4>
                       </div>
 
                       <div className="flex-1 flex flex-col justify-center">
                         <motion.label 
                           whileHover={{ scale: 1.01, borderColor: 'rgba(168, 85, 247, 0.5)', backgroundColor: 'rgba(168, 85, 247, 0.05)' }}
-                          className="flex flex-col items-center justify-center w-full h-56 border-2 border-gray-700 border-dashed rounded-3xl cursor-pointer bg-black/20 transition-all duration-300 group"
+                          className="flex flex-col items-center justify-center w-full h-56 border-2 border-gray-300 dark:border-gray-700 border-dashed rounded-3xl cursor-pointer bg-gray-50 dark:bg-black/20 transition-all duration-300 group"
                         >
                           <div className="flex flex-col items-center justify-center p-6 text-center">
                             <div className="p-4 bg-accent/10 rounded-2xl mb-4 group-hover:scale-110 group-hover:bg-accent/20 transition-all">
                               <Upload size={40} className="text-accent" />
                             </div>
-                            <p className="text-white font-medium mb-1">Klik atau Drop File</p>
+                            <p className="text-gray-900 dark:text-white font-medium mb-1">Klik atau Drop File</p>
                             <p className="text-xs text-gray-500">Maksimum ukuran file: 10MB</p>
                           </div>
                           <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} disabled={loading} />
@@ -502,18 +520,18 @@ const DataInput = () => {
           <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 blur-[100px] -z-10 rounded-full"></div>
           
           <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4">
-            <h3 className="text-xl font-bold text-white flex items-center gap-3">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
               <Database size={24} className="text-primary"/> 
               Data Historis Penjualan
             </h3>
             
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
               <div className="relative flex-1 sm:w-64">
-                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 z-10" />
                 <input
                   type="text"
                   placeholder="Cari data..."
-                  className="input-field pl-10 py-2 text-sm bg-gray-900/50"
+                  className="input-field pl-10 py-2 text-sm bg-gray-50 dark:bg-gray-900/50"
                   value={searchTerm}
                   onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                 />
@@ -535,7 +553,7 @@ const DataInput = () => {
                   whileHover={{ scale: 1.02 }} 
                   whileTap={{ scale: 0.98 }} 
                   onClick={handleExportCSV} 
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-sm font-bold hover:bg-emerald-500/20 transition-all"
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 rounded-xl text-sm font-bold hover:bg-emerald-500/20 transition-all"
                 >
                   <Download size={18} /> Export
                 </motion.button>
@@ -544,7 +562,7 @@ const DataInput = () => {
                   whileHover={{ scale: 1.02 }} 
                   whileTap={{ scale: 0.98 }} 
                   onClick={handleDeleteAll} 
-                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-500 border border-red-500/20 rounded-xl text-sm font-bold hover:bg-red-500/20 transition-all"
+                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 dark:bg-red-500/10 text-red-600 dark:text-red-500 border border-red-500/20 rounded-xl text-sm font-bold hover:bg-red-500/20 transition-all"
                 >
                   <Trash2 size={18} /> Reset
                 </motion.button>
@@ -553,7 +571,7 @@ const DataInput = () => {
           </div>
 
           <div className="flex items-center justify-between mb-3 px-1">
-            <div className="flex items-center gap-2 text-xs text-gray-400">
+            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
               <span>Show</span>
               <select 
                 value={rowsPerPage} 
@@ -561,7 +579,7 @@ const DataInput = () => {
                   setRowsPerPage(e.target.value === 'all' ? 'all' : parseInt(e.target.value));
                   setCurrentPage(1);
                 }}
-                className="bg-gray-800 border border-gray-700 text-gray-300 rounded px-1 py-0.5 outline-none focus:border-primary"
+                className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded px-1 py-0.5 outline-none focus:border-primary"
               >
                 <option value={5}>5</option>
                 <option value={10}>10</option>
@@ -571,32 +589,32 @@ const DataInput = () => {
               </select>
               <span>entries</span>
             </div>
-            <div className="text-xs text-gray-500">
+            <div className="text-xs text-gray-600 dark:text-gray-400">
               Showing {displayedData.length} of {filteredData.length} entries
             </div>
           </div>
           
-          <div className="flex-1 overflow-x-auto rounded-lg border border-gray-700/50 custom-scrollbar">
+          <div className="flex-1 overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700/50 custom-scrollbar">
             <table className="w-full text-sm text-left text-gray-400">
-              <thead className="text-xs text-gray-300 uppercase bg-gray-800/80 sticky top-0 z-10 backdrop-blur-md">
+              <thead className="text-xs text-gray-600 dark:text-gray-300 uppercase bg-gray-100 dark:bg-gray-800/80 sticky top-0 z-10 backdrop-blur-md">
                 <tr>
-                  <th className="px-4 py-3 border-r border-gray-700/50">
+                  <th className="px-4 py-3 border-r border-gray-200 dark:border-gray-700/50">
                     <input 
                       type="checkbox" 
-                      className="rounded border-gray-700 bg-gray-900 text-primary focus:ring-primary w-4 h-4"
+                      className="rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-primary focus:ring-primary w-4 h-4"
                       checked={selectedIds.length === displayedData.length && displayedData.length > 0}
                       onChange={handleSelectAll}
                     />
                   </th>
-                  <th className="px-4 py-3 border-r border-gray-700/50">ID Transaksi</th>
-                  <th className="px-4 py-3 border-r border-gray-700/50">Tanggal (Y-M-D)</th>
-                  <th className="px-4 py-3 border-r border-gray-700/50">Mgg/Thn</th>
-                  <th className="px-4 py-3 border-r border-gray-700/50 text-right">Jumlah Terjual</th>
-                  <th className="px-4 py-3 border-r border-gray-700/50 text-center">Waktu Input</th>
+                  <th className="px-4 py-3 border-r border-gray-200 dark:border-gray-700/50">ID Transaksi</th>
+                  <th className="px-4 py-3 border-r border-gray-200 dark:border-gray-700/50">Tanggal (Y-M-D)</th>
+                  <th className="px-4 py-3 border-r border-gray-200 dark:border-gray-700/50">Mgg/Thn</th>
+                  <th className="px-4 py-3 border-r border-gray-200 dark:border-gray-700/50 text-right">Jumlah Terjual</th>
+                  <th className="px-4 py-3 border-r border-gray-200 dark:border-gray-700/50 text-center">Waktu Input</th>
                   <th className="px-4 py-3 text-center">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800/50">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-800/50">
                 {loading ? (
                   [...Array(5)].map((_, i) => <SkeletonRow key={i} />)
                 ) : displayedData.length > 0 ? displayedData.map((item, index) => (
@@ -604,23 +622,24 @@ const DataInput = () => {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
-                    whileHover={{ backgroundColor: 'rgba(55, 65, 81, 0.4)', scale: 1.01 }}
+                    whileHover={{ scale: 1.005 }}
+                    whileTap={{ scale: 0.995 }}
                     key={item.id} 
-                    className={`border-b border-gray-700/50 hover:bg-gray-800/30 origin-left ${selectedIds.includes(item.id) ? 'bg-primary/5' : ''}`}
+                    className={`border-b border-gray-200 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors duration-200 origin-center ${selectedIds.includes(item.id) ? 'bg-primary/5' : ''}`}
                   >
-                    <td className="px-4 py-3 border-r border-gray-700/30 text-center">
+                    <td className="px-4 py-3 border-r border-gray-200 dark:border-gray-700/30 text-center">
                       <input 
                         type="checkbox" 
-                        className="rounded border-gray-700 bg-gray-900 text-primary focus:ring-primary w-4 h-4"
+                        className="rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-primary focus:ring-primary w-4 h-4"
                         checked={selectedIds.includes(item.id)}
                         onChange={() => handleSelectRow(item.id)}
                       />
                     </td>
-                    <td className="px-4 py-3 border-r border-gray-700/30 font-medium text-gray-300">{item.id}</td>
-                    <td className="px-4 py-3 border-r border-gray-700/30 text-accent font-bold">{item.sale_date}</td>
-                    <td className="px-4 py-3 border-r border-gray-700/30 text-xs">M{item.week} / {item.year}</td>
-                    <td className="px-4 py-3 border-r border-gray-700/30 text-right text-accent font-medium">{parseInt(item.tickets_sold).toLocaleString()}</td>
-                    <td className="px-4 py-3 border-r border-gray-700/30 text-center text-xs text-gray-500">
+                    <td className="px-4 py-3 border-r border-gray-200 dark:border-gray-700/30 font-medium text-gray-700 dark:text-gray-300">{item.id}</td>
+                    <td className="px-4 py-3 border-r border-gray-200 dark:border-gray-700/30 text-accent font-bold">{item.sale_date}</td>
+                    <td className="px-4 py-3 border-r border-gray-200 dark:border-gray-700/30 text-xs text-gray-600 dark:text-gray-400">M{item.week} / {item.year}</td>
+                    <td className="px-4 py-3 border-r border-gray-200 dark:border-gray-700/30 text-right text-accent font-medium">{parseInt(item.tickets_sold).toLocaleString()}</td>
+                    <td className="px-4 py-3 border-r border-gray-200 dark:border-gray-700/30 text-center text-xs text-gray-600 dark:text-gray-500">
                       {item.created_at ? new Date(item.created_at).toLocaleString('id-ID', { 
                         day: '2-digit', 
                         month: '2-digit', 
@@ -654,7 +673,7 @@ const DataInput = () => {
               <button 
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage(prev => prev - 1)}
-                className="px-3 py-1 bg-gray-800 text-gray-400 rounded-lg hover:bg-gray-700 disabled:opacity-30 text-xs"
+                className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-xs"
               >
                 Prev
               </button>
@@ -662,7 +681,7 @@ const DataInput = () => {
               <button 
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage(prev => prev + 1)}
-                className="px-3 py-1 bg-gray-800 text-gray-400 rounded-lg hover:bg-gray-700 disabled:opacity-30 text-xs"
+                className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-xs"
               >
                 Next
               </button>
@@ -687,15 +706,15 @@ const DataInput = () => {
                 <AlertTriangle size={32} />
               </div>
               
-              <h3 className="text-xl font-bold text-white mb-2">{confirmConfig.title}</h3>
-              <p className="text-gray-400 text-sm mb-8 leading-relaxed">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{confirmConfig.title}</h3>
+              <p className="text-gray-500 dark:text-gray-400 text-sm mb-8 leading-relaxed">
                 {confirmConfig.message}
               </p>
 
               <div className="flex gap-3">
                 <button 
                   onClick={() => setConfirmConfig({ ...confirmConfig, show: false })}
-                  className="flex-1 px-4 py-3 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl font-bold transition-all"
+                  className="flex-1 px-4 py-3 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold transition-all"
                 >
                   Batal
                 </button>
