@@ -152,9 +152,9 @@ const Dashboard = () => {
   const filteredData = data.filter(item => {
     const s = searchTerm.toLowerCase();
     return (
-      item.id?.toLowerCase().includes(s) || 
-      item.name.toLowerCase().includes(s) || 
-      item.tickets_sold.toString().includes(s)
+      (item.id && item.id.toLowerCase().includes(s)) || 
+      (item.name && item.name.toLowerCase().includes(s)) || 
+      (item.tickets_sold && item.tickets_sold.toString().includes(s))
     );
   });
 
@@ -191,7 +191,7 @@ const Dashboard = () => {
         onMouseLeave={() => { x.set(0); y.set(0); }}
         variants={itemVariants}
         whileHover={{ y: -5, scale: 1.02 }}
-        className={`${colorClass} rounded-3xl p-8 relative overflow-hidden group cursor-pointer shadow-2xl transition-shadow`}
+        className={`${colorClass} rounded-2xl sm:rounded-3xl p-6 sm:p-8 relative overflow-hidden group cursor-pointer shadow-2xl transition-shadow`}
       >
         <div className="absolute -right-6 -bottom-6 opacity-10 group-hover:scale-110 group-hover:-rotate-12 transition-all duration-700">
           <Icon size={140} />
@@ -200,8 +200,8 @@ const Dashboard = () => {
           <div className="p-3 bg-white/20 w-fit rounded-2xl mb-6 shadow-xl">
             <Icon size={28} />
           </div>
-          <p className="opacity-70 text-xs font-black uppercase tracking-[0.2em] mb-1">{title}</p>
-          <h3 className="text-4xl font-black tabular-nums">
+          <p className="opacity-70 text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] mb-1 sm:mb-2">{title}</p>
+          <h3 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-black tabular-nums tracking-tighter">
             <AnimatedNumber value={value} />
           </h3>
         </div>
@@ -216,22 +216,22 @@ const Dashboard = () => {
       animate="visible"
       className="space-y-8"
     >
-      <motion.div variants={itemVariants} className="flex justify-between items-end">
+      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
-          <h1 className="text-4xl font-[900] text-gray-900 dark:text-white mb-2 tracking-tighter">Ringkasan Dashboard</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Ikhtisar data penjualan tiket pesawat dan performa sistem cerdas.</p>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-[900] text-gray-900 dark:text-white mb-2 tracking-tighter">Ringkasan Dashboard</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm md:text-base font-medium">Ikhtisar data penjualan tiket pesawat dan performa sistem cerdas.</p>
         </div>
         <motion.div 
           animate={{ scale: [1, 1.05, 1], rotate: [0, 2, 0, -2, 0] }} 
           transition={{ repeat: Infinity, duration: 4 }}
-          className="text-xs text-blue-600 dark:text-primary bg-primary/10 px-4 py-2 rounded-2xl border border-primary/20 font-black shadow-sm flex items-center gap-2"
+          className="text-[10px] sm:text-sm text-blue-600 dark:text-primary bg-primary/10 px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl border border-primary/20 font-black shadow-sm flex items-center gap-2"
         >
           <div className="w-2 h-2 bg-primary rounded-full animate-ping"></div>
-          SISTEM AKTIF & TERHUBUNG
+          SISTEM AKTIF
         </motion.div>
       </motion.div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
         {loading ? (
           <>
             <SkeletonCard />
@@ -278,16 +278,16 @@ const Dashboard = () => {
           </motion.div>
           <div className="flex-1">
             <h4 className="text-sm font-bold text-amber-600 dark:text-amber-500 uppercase tracking-wider">Perhatian: Kualitas Data Terdeteksi Rendah</h4>
-            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{auditAlerts[0]} (dan {auditAlerts.length - 1} masalah lainnya)</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">{auditAlerts[0]} (dan {auditAlerts.length - 1} masalah lainnya)</p>
           </div>
-          <Link to="/lstm-process" className="text-xs font-bold text-amber-500 hover:underline hover:text-amber-400 transition-colors">Lihat Detail & Audit</Link>
+          <Link to="/dashboard/lstm-process" className="text-sm font-bold text-amber-500 hover:underline hover:text-amber-400 transition-colors">Lihat Detail & Audit</Link>
         </motion.div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 xl:gap-10">
         <motion.div 
           variants={itemVariants}
-          className="lg:col-span-2 glass-panel p-6 shadow-xl"
+          className="lg:col-span-2 glass-panel p-4 sm:p-6 lg:p-8 shadow-xl"
         >
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
@@ -299,7 +299,7 @@ const Dashboard = () => {
               </motion.div>
               Tren Penjualan Tiket
             </h3>
-            <div className="text-xs text-gray-500 dark:text-gray-400 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="text-sm text-gray-500 dark:text-gray-400 flex flex-wrap items-center gap-x-4 gap-y-2">
               <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-gray-500"></span> Aktual</div>
               <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_5px_rgba(245,158,11,0.5)]"></span> MA3</div>
               <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-primary shadow-[0_0_5px_rgba(59,130,246,0.8)]"></span> Prediksi</div>
@@ -307,7 +307,7 @@ const Dashboard = () => {
             </div>
           </div>
           
-          <div className="h-[320px] w-full relative">
+          <div className="h-[250px] sm:h-[320px] lg:h-[400px] w-full relative">
             {loading ? (
               <SkeletonChart />
             ) : data.length > 0 ? (
@@ -365,14 +365,14 @@ const Dashboard = () => {
                   <XAxis 
                     dataKey="name" 
                     stroke="#64748b" 
-                    fontSize={10} 
+                    fontSize={11} 
                     tickLine={false} 
                     axisLine={false}
                     interval="preserveStartEnd"
                   />
                   <YAxis 
                     stroke="#64748b" 
-                    fontSize={10} 
+                    fontSize={11} 
                     tickLine={false} 
                     axisLine={false}
                     tickFormatter={(value) => value.toLocaleString()}
@@ -437,12 +437,12 @@ const Dashboard = () => {
 
         <motion.div 
           variants={itemVariants}
-          className="lg:col-span-1 glass-panel p-6 flex flex-col shadow-xl relative overflow-hidden"
+          className="lg:col-span-1 glass-panel p-4 sm:p-6 lg:p-8 flex flex-col shadow-xl relative overflow-hidden"
         >
           <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-full pointer-events-none"></div>
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6 relative z-10">Aksi Cepat</h3>
           <div className="space-y-4 flex-1 relative z-10">
-            <Link to="/data-input">
+            <Link to="/dashboard/data-input">
               <motion.div 
                 whileHover={{ scale: 1.03, backgroundColor: isDarkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(243, 244, 246, 0.8)' }}
                 whileTap={{ scale: 0.98 }}
@@ -454,7 +454,7 @@ const Dashboard = () => {
                   </div>
                   <div>
                     <div className="text-sm font-bold text-gray-900 dark:text-white group-hover:text-accent transition-colors">Input Data</div>
-                    <div className="text-[10px] text-gray-500 dark:text-gray-400">Kelola database tiket</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Kelola database tiket</div>
                   </div>
                 </div>
                 <motion.div
@@ -465,7 +465,7 @@ const Dashboard = () => {
                 </motion.div>
               </motion.div>
             </Link>
-            <Link to="/lstm-process">
+            <Link to="/dashboard/lstm-process">
               <motion.div 
                 whileHover={{ scale: 1.03, backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.15)' }}
                 whileTap={{ scale: 0.98 }}
@@ -477,7 +477,7 @@ const Dashboard = () => {
                   </div>
                   <div>
                     <div className="text-sm font-bold text-gray-900 dark:text-white group-hover:text-primary transition-colors">Mulai Prediksi</div>
-                    <div className="text-[10px] text-gray-500 dark:text-gray-400">Running LSTM Engine</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Running LSTM Engine</div>
                   </div>
                 </div>
                 <motion.div
@@ -513,7 +513,7 @@ const Dashboard = () => {
                 </span>
               )}
             </h4>
-            <p className="text-[10px] mt-2 opacity-70 leading-relaxed relative z-10">
+            <p className="text-xs mt-2 opacity-70 leading-relaxed relative z-10">
               {lastRunDate ? `Berdasarkan analisis: ${new Date(lastRunDate).toLocaleDateString('id-ID')}` : 'Belum ada hasil prediksi terbaru.'}
             </p>
           </motion.div>
@@ -521,49 +521,47 @@ const Dashboard = () => {
       </div>
       
       {/* Feature 1: Sales Heatmap */}
-      <motion.div variants={itemVariants} className="glass-panel p-6 shadow-xl">
+      <motion.div variants={itemVariants} className="glass-panel p-4 sm:p-6 lg:p-8 shadow-xl">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
-          <Activity size={20} className="text-emerald-500" /> Heatmap Intensitas Penjualan
+          <Activity size={20} className="text-primary" /> Heatmap Intensitas Penjualan
         </h3>
         <div className="flex flex-wrap gap-2">
           {data.slice(-52).map((item, i) => {
             // Determine intensity color based on value vs average
             const intensity = item.tickets_sold / (stats.avg * 1.5);
-            const opacity = Math.min(1, Math.max(0.1, intensity));
+            
+            let colorClass = "bg-gray-100 dark:bg-gray-800/50"; // Kosong/Sangat Rendah
+            if (intensity > 0.8) colorClass = "bg-primary shadow-[0_0_10px_rgba(59,130,246,0.6)]"; // Sangat Tinggi
+            else if (intensity > 0.6) colorClass = "bg-primary/80"; // Tinggi
+            else if (intensity > 0.4) colorClass = "bg-primary/50"; // Sedang
+            else if (intensity > 0.2) colorClass = "bg-primary/30"; // Rendah
             
             return (
-              <div 
-                key={i}
-                className="group relative"
-              >
-                <div 
-                  className="w-6 h-6 rounded-md transition-all duration-500 hover:scale-125 hover:z-10 cursor-pointer"
-                  style={{ 
-                    backgroundColor: `rgba(16, 185, 129, ${opacity})`,
-                    boxShadow: opacity > 0.7 ? '0 0 10px rgba(16, 185, 129, 0.3)' : 'none'
-                  }}
-                />
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-[10px] text-white rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none transition-opacity border border-white/10 z-50">
+              <div key={i} className="group relative">
+                <div className={`w-6 h-6 rounded-md transition-all duration-500 hover:scale-125 hover:z-10 cursor-pointer border border-black/5 dark:border-white/5 ${colorClass}`} />
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-[10px] text-white rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none transition-opacity border border-white/10 z-50 shadow-xl">
                   {item.name}: {item.tickets_sold.toLocaleString()} Tiket
                 </div>
               </div>
             );
           })}
         </div>
-        <div className="mt-4 flex items-center gap-4 text-[10px] text-gray-500">
-          <span>Rendah</span>
-          <div className="flex gap-1">
-            {[0.1, 0.3, 0.5, 0.7, 0.9].map(o => (
-              <div key={o} className="w-3 h-3 rounded-sm" style={{ backgroundColor: `rgba(16, 185, 129, ${o})` }} />
-            ))}
+        <div className="mt-6 flex items-center gap-4 text-xs font-bold text-gray-500 dark:text-gray-400">
+          <span>Sepi</span>
+          <div className="flex gap-1.5">
+            <div className="w-4 h-4 rounded-sm border border-black/5 dark:border-white/5 bg-gray-100 dark:bg-gray-800/50" />
+            <div className="w-4 h-4 rounded-sm border border-black/5 dark:border-white/5 bg-primary/30" />
+            <div className="w-4 h-4 rounded-sm border border-black/5 dark:border-white/5 bg-primary/50" />
+            <div className="w-4 h-4 rounded-sm border border-black/5 dark:border-white/5 bg-primary/80" />
+            <div className="w-4 h-4 rounded-sm border border-black/5 dark:border-white/5 bg-primary shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
           </div>
-          <span>Tinggi</span>
+          <span>Ramai</span>
         </div>
       </motion.div>
 
       <motion.div 
         variants={itemVariants}
-        className="glass-panel p-6 shadow-xl"
+        className="glass-panel p-4 sm:p-6 lg:p-8 shadow-xl"
       >
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
@@ -587,7 +585,7 @@ const Dashboard = () => {
         </div>
 
         <div className="flex items-center justify-between mb-3 px-1">
-          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
             <span>Show</span>
             <select 
               value={rowsPerPage} 
@@ -614,7 +612,7 @@ const Dashboard = () => {
         ) : (
           <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700/50 max-h-80 overflow-y-auto custom-scrollbar bg-gray-50/50 dark:bg-gray-900/20">
             <table className="w-full text-sm text-left text-gray-400">
-              <thead className="text-xs text-gray-600 dark:text-gray-300 uppercase bg-gray-100 dark:bg-gray-800/90 sticky top-0 z-10 backdrop-blur-md shadow-sm">
+              <thead className="text-sm text-gray-600 dark:text-gray-300 uppercase bg-gray-100 dark:bg-gray-800/90 sticky top-0 z-10 backdrop-blur-md shadow-sm">
                 <tr>
                   <th className="px-4 py-4 border-r border-gray-200 dark:border-gray-700/50">No</th>
                   <th className="px-4 py-4 border-r border-gray-200 dark:border-gray-700/50">ID Transaksi</th>
@@ -669,7 +667,7 @@ const Dashboard = () => {
             <button 
               disabled={currentPage === 1}
               onClick={() => setCurrentPage(prev => prev - 1)}
-              className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-xs"
+              className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-sm"
             >
               Prev
             </button>

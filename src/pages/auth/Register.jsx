@@ -66,13 +66,13 @@ const Register = () => {
         </motion.button>
       </div>
 
-      <div className="glass-panel w-full max-w-md p-10 relative z-10 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.2)]">
+      <div className="glass-panel w-full max-w-md p-6 sm:p-10 relative z-10 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.2)]">
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-[2rem] bg-gradient-to-tr from-accent to-primary mb-6 shadow-2xl shadow-accent/30 group">
-            <PlaneTakeoff size={40} className="text-white group-hover:scale-110 transition-transform duration-500" />
+          <div className="inline-flex items-center justify-center w-24 h-24 rounded-[2.5rem] bg-gradient-to-tr from-accent to-primary mb-8 shadow-[0_20px_50px_-12px_rgba(59,130,246,0.3)] group">
+            <PlaneTakeoff size={48} className="text-white group-hover:scale-110 transition-transform duration-500" />
           </div>
-          <h2 className="text-4xl font-[900] text-gray-900 dark:text-white mb-2 tracking-tighter italic">Buat Akun</h2>
-          <p className="text-gray-500 dark:text-gray-400 text-sm font-medium tracking-tight">Bergabung dengan ekosistem SWA Predict</p>
+          <h2 className="text-3xl sm:text-4xl font-[900] text-gray-900 dark:text-white mb-3 tracking-tighter italic">Buat Akun</h2>
+          <p className="text-gray-500 dark:text-gray-400 text-sm font-bold uppercase tracking-widest">SWA Predict Ecosystem</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -133,9 +133,9 @@ const Register = () => {
           <button
             type="submit"
             disabled={loading}
-            className="btn-primary w-full flex justify-center py-3 mt-4"
+            className="btn-primary w-full mt-4"
           >
-            {loading ? 'Memproses...' : 'Daftar Akun'}
+            {loading ? 'Memproses...' : 'Daftar Sekarang'}
           </button>
         </form>
 

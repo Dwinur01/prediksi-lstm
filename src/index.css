@@ -8,13 +8,34 @@
   :root {
     --background: 248 250 252; /* Setara dengan #f8fafc */
     --surface: 255 255 255;    /* Setara dengan #ffffff */
+    --border: 226 232 240;     /* Setara dengan #e2e8f0 */
+    --grid: 241 245 249;       /* Setara dengan #f1f5f9 */
   }
   .dark {
     --background: 15 23 42;    /* Setara dengan #0f172a */
     --surface: 30 41 59;       /* Setara dengan #1e293b */
+    --border: 51 65 85;        /* Setara dengan #334155 */
+    --grid: 30 41 59;          /* Setara dengan #1e293b */
   }
+  html {
+    font-size: 13px;
+    transition: font-size 0.3s ease-in-out;
+  }
+  @media (min-width: 640px) {
+    html { font-size: 14px; }
+  }
+  @media (min-width: 768px) {
+    html { font-size: 15px; }
+  }
+  @media (min-width: 1024px) {
+    html { font-size: 16px; }
+  }
+  @media (min-width: 1536px) {
+    html { font-size: 17px; }
+  }
+
   body {
-    @apply bg-background text-gray-800 dark:text-gray-100 font-['Plus_Jakarta_Sans',sans-serif] antialiased transition-colors duration-500 selection:bg-primary/20 cursor-none;
+    @apply bg-background text-gray-800 dark:text-gray-100 font-['Plus_Jakarta_Sans',sans-serif] antialiased transition-colors duration-500 selection:bg-primary/20;
   }
 
   /* Global Fade-in for non-motion elements */
@@ -34,11 +55,11 @@
   }
   
   .btn-primary {
-    @apply bg-gradient-to-r from-primary to-blue-600 hover:from-blue-600 hover:to-primary text-white font-extrabold py-3 px-8 rounded-2xl transition-all duration-500 shadow-xl shadow-primary/20 hover:shadow-primary/40 hover:-translate-y-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-gradient-to-br from-primary via-blue-600 to-blue-700 hover:from-blue-600 hover:via-blue-700 hover:to-primary text-white font-black py-4 px-10 rounded-2xl transition-all duration-500 shadow-[0_15px_30px_-10px_rgba(59,130,246,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(59,130,246,0.6)] hover:-translate-y-1 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2;
   }
   
   .btn-secondary {
-    @apply bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 border border-gray-100 dark:border-white/10 text-gray-700 dark:text-gray-200 font-bold py-3 px-6 rounded-2xl transition-all duration-500 shadow-sm hover:shadow-lg hover:-translate-y-0.5;
+    @apply bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-200 font-extrabold py-4 px-10 rounded-2xl transition-all duration-500 shadow-xl shadow-gray-200/50 dark:shadow-none hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-2;
   }
 
   .input-field {

@@ -3,8 +3,6 @@ import * as tf from '@tensorflow/tfjs';
 /**
  * 1. Feature Engineering Helpers
  */
-
-// Simple Moving Average dengan penanganan akumulatif untuk minggu awal
 export const calculateSMA = (data, period) => {
   return data.map((_, i) => {
     const start = Math.max(0, i - period + 1);
@@ -14,7 +12,6 @@ export const calculateSMA = (data, period) => {
   });
 };
 
-// Exponential Moving Average
 export const calculateEMA = (data, period) => {
   const k = 2 / (period + 1);
   let ema = [data[0]];
@@ -25,28 +22,54 @@ export const calculateEMA = (data, period) => {
 };
 
 /**
+ * Differencing Helpers
+ */
+export const applyDifferencing = (rawValues) => {
+  const diffs = [0]; // First element has 0 difference since no previous element
+  for (let i = 1; i < rawValues.length; i++) {
+    diffs.push(rawValues[i] - rawValues[i - 1]);
+  }
+  return diffs;
+};
+
+export const reverseDifferencing = (diffValue, previousActualValue) => {
+  return previousActualValue + diffValue;
+};
+
+/**
  * 2. Multivariate Normalization
  */
-export const prepareMultivariateData = (rawValues, emaPeriod = 5) => {
-  const ma3 = calculateSMA(rawValues, 3);
-  const ma4 = calculateSMA(rawValues, 4);
-  const ema = calculateEMA(rawValues, emaPeriod);
+export const prepareMultivariateData = (data, emaPeriod = 5) => {
+  const rawValues = data.map(d => parseInt(d.tickets_sold) || 0);
+  const diffValues = applyDifferencing(rawValues);
 
-  // Gabungkan fitur: [Asli, MA3, MA4, EMA]
-  const features = rawValues.map((v, i) => [v, ma3[i], ma4[i], ema[i]]);
+  const ma3 = calculateSMA(diffValues, 3);
+  const ma4 = calculateSMA(diffValues, 4);
+  const ema = calculateEMA(diffValues, emaPeriod);
+  
+  // Seasonality: Month Index (1-12)
+  const months = data.map(d => {
+    const week = parseInt(d.week) || 1;
+    return Math.ceil(week / 4.33);
+  });
+
+  // Gabungkan fitur: [Diff, MA3, MA4, EMA, Month]
+  const features = diffValues.map((v, i) => [v, ma3[i], ma4[i], ema[i], months[i]]);
   
   // Hitung Min-Max per kolom untuk normalisasi independen
   const mins = [
-    Math.min(...rawValues), 
+    Math.min(...diffValues), 
     Math.min(...ma3), 
     Math.min(...ma4), 
-    Math.min(...ema)
+    Math.min(...ema),
+    1 // Min for month is always 1
   ];
   const maxs = [
-    Math.max(...rawValues), 
+    Math.max(...diffValues), 
     Math.max(...ma3), 
     Math.max(...ma4), 
-    Math.max(...ema)
+    Math.max(...ema),
+    12 // Max for month is always 12
   ];
   
   const normalizedFeatures = features.map(row => 
@@ -56,11 +79,10 @@ export const prepareMultivariateData = (rawValues, emaPeriod = 5) => {
     })
   );
 
-  return { normalizedFeatures, mins, maxs, ma3, ma4, ema };
+  return { normalizedFeatures, mins, maxs, ma3, ma4, ema, diffValues, months };
 };
 
 export const denormalizeData = (normalizedValue, min, max) => {
-  // Hanya digunakan untuk output (target tunggal: tiket terjual)
   return normalizedValue * (max - min) + min;
 };
 
@@ -71,10 +93,9 @@ export const createSequences = (normalizedFeatures, windowSize) => {
   const X = [];
   const y = [];
   
-  // Target tetap kolom index 0 (nilai asli tiket terjual)
   for (let i = 0; i < normalizedFeatures.length - windowSize; i++) {
     X.push(normalizedFeatures.slice(i, i + windowSize));
-    y.push(normalizedFeatures[i + windowSize][0]);
+    y.push(normalizedFeatures[i + windowSize][0]); // Target is normalized Diff
   }
   
   return { X, y };
@@ -86,11 +107,14 @@ export const createSequences = (normalizedFeatures, windowSize) => {
 export const buildModel = (windowSize, learningRate) => {
   const model = tf.sequential();
   
-  model.add(tf.layers.lstm({
-    units: 64, // Ditingkatkan sedikit karena fitur bertambah
-    inputShape: [windowSize, 4], // 4 fitur input
-    returnSequences: false,
-    activation: 'tanh'
+  // Bidirectional LSTM
+  model.add(tf.layers.bidirectional({
+    layer: tf.layers.lstm({
+      units: 64,
+      returnSequences: false,
+      activation: 'tanh'
+    }),
+    inputShape: [windowSize, 5] // 5 fitur input (Diff, MA3, MA4, EMA, Month)
   }));
   
   model.add(tf.layers.dropout({ rate: 0.2 }));
@@ -105,22 +129,29 @@ export const buildModel = (windowSize, learningRate) => {
 /**
  * 5. Train Model
  */
-export const trainModel = async (model, X, y, epochs, onEpochEnd) => {
-  // X: [samples, windowSize, 4]
+export const trainModel = async (model, X, y, epochs, batchSize = 16, onEpochEnd) => {
   const xs = tf.tensor3d(X);
-  // y: [samples, 1]
   const ys = tf.tensor2d(y, [y.length, 1]);
+  
+  const initialLR = model.optimizer.learningRate;
   
   await model.fit(xs, ys, {
     epochs: epochs,
-    batchSize: 4,
+    batchSize: batchSize,
     shuffle: true,
     callbacks: {
       onEpochEnd: (epoch, logs) => {
+        // Learning Rate Decay: reduce by 5% every 2 epochs
+        if (epoch > 0 && epoch % 2 === 0) {
+          model.optimizer.learningRate = model.optimizer.learningRate * 0.95;
+        }
         if (onEpochEnd) onEpochEnd(epoch, logs.loss);
       }
     }
   });
+  
+  // Restore initial LR for future runs if needed
+  model.optimizer.learningRate = initialLR;
   
   xs.dispose();
   ys.dispose();
@@ -136,7 +167,7 @@ export const predict = (model, X) => {
   const result = Array.from(preds.dataSync());
   xs.dispose();
   preds.dispose();
-  return result;
+  return result; // These are normalized diffs
 };
 
 /**
@@ -155,6 +186,8 @@ export const calculateMetrics = (actual, predicted) => {
     }
   }
   
+  if (n === 0) return { mse: 0, rmse: 0, mape: 0 };
+  
   mse = mse / n;
   const rmse = Math.sqrt(mse);
   mape = (mape / n) * 100;
@@ -171,15 +204,16 @@ export const calculateMetrics = (actual, predicted) => {
  */
 export const getManualLSTMCalculation = async (model) => {
   try {
-    const lstmLayer = model.layers[0];
-    const weights = lstmLayer.getWeights(); 
+    const bidirectionalLayer = model.layers[0];
+    const weights = bidirectionalLayer.getWeights(); 
+    // weights[0] = forward_kernel, weights[1] = forward_recurrent, weights[2] = forward_bias
     const kernelArray = await weights[0].array();
     const biasArray = await weights[2].array();
     
     const units = 64;
     const getGateSample = (matrix, gateIndex) => {
-      // Ambil 2 baris pertama (fitur) dan 5 kolom pertama dari gate tersebut
-      return matrix.slice(0, 2).map(row => 
+      // Ambil semua 5 baris (fitur) dan 5 kolom pertama dari gate tersebut
+      return matrix.slice(0, 5).map(row => 
         row.slice(gateIndex * units, gateIndex * units + 5)
       );
     };
@@ -189,7 +223,7 @@ export const getManualLSTMCalculation = async (model) => {
       forgetGate: getGateSample(kernelArray, 1),
       candidateGate: getGateSample(kernelArray, 2),
       outputGate: getGateSample(kernelArray, 3),
-      bias: biasArray.slice(0, 10) // 10 nilai bisa disusun 2x5
+      bias: biasArray.slice(0, 10) // 10 nilai bias
     };
   } catch (e) {
     return null;
@@ -235,41 +269,50 @@ export const auditDataQuality = (data) => {
 /**
  * 10. Multi-Step Forecasting (Future Prediction)
  */
-export const multiStepForecast = async (model, lastWindowNormalized, steps, mins, maxs, emaPeriod) => {
-  let currentWindow = JSON.parse(JSON.stringify(lastWindowNormalized)); // [windowSize][4]
+export const multiStepForecast = async (model, lastWindowNormalized, steps, mins, maxs, emaPeriod, lastActualValue, currentWeek) => {
+  let currentWindow = JSON.parse(JSON.stringify(lastWindowNormalized)); // [windowSize][5]
   const predictions = [];
   
   const k = 2 / (emaPeriod + 1);
+  let prevActual = lastActualValue;
+  let weekCounter = currentWeek;
 
   for (let i = 0; i < steps; i++) {
     const inputTensor = tf.tensor3d([currentWindow]);
-    const predNormalized = (await model.predict(inputTensor).dataSync())[0];
+    const predNormalizedDiff = (await model.predict(inputTensor).dataSync())[0];
     inputTensor.dispose();
 
-    // Denormalisasi untuk mendapatkan nilai asli
-    const predActual = Math.round(predNormalized * (maxs[0] - mins[0]) + mins[0]);
+    // Denormalisasi untuk mendapatkan nilai difference asli
+    const predDiff = Math.round(predNormalizedDiff * (maxs[0] - mins[0]) + mins[0]);
+    
+    // Reverse differencing to get the actual projection
+    const predActual = prevActual + predDiff;
     
     predictions.push({
       weekOffset: i + 1,
       value: predActual,
-      normalized: predNormalized
+      normalized: predNormalizedDiff
     });
 
+    // Update for next step
+    prevActual = predActual;
+    weekCounter++;
+    const nextMonth = Math.ceil(weekCounter / 4.33);
+    const nextMonthNormalized = (nextMonth - 1) / 11; // normalisasi 1-12 ke 0-1
+
     // Update window untuk langkah berikutnya
-    // Geser window (hapus yang paling lama)
     const nextWindow = currentWindow.slice(1);
     
-    // Hitung MA/EMA baru untuk titik prediksi ini
-    const lastOriginals = nextWindow.map(row => row[0]);
-    lastOriginals.push(predNormalized);
+    const lastOriginalDiffs = nextWindow.map(row => row[0]);
+    lastOriginalDiffs.push(predNormalizedDiff);
     
-    const newMA3 = lastOriginals.slice(-3).reduce((a, b) => a + b, 0) / Math.min(lastOriginals.length, 3);
-    const newMA4 = lastOriginals.slice(-4).reduce((a, b) => a + b, 0) / Math.min(lastOriginals.length, 4);
+    const newMA3 = lastOriginalDiffs.slice(-3).reduce((a, b) => a + b, 0) / Math.min(lastOriginalDiffs.length, 3);
+    const newMA4 = lastOriginalDiffs.slice(-4).reduce((a, b) => a + b, 0) / Math.min(lastOriginalDiffs.length, 4);
     
     const prevEMA = currentWindow[currentWindow.length - 1][3];
-    const newEMA = predNormalized * k + prevEMA * (1 - k);
+    const newEMA = predNormalizedDiff * k + prevEMA * (1 - k);
 
-    nextWindow.push([predNormalized, newMA3, newMA4, newEMA]);
+    nextWindow.push([predNormalizedDiff, newMA3, newMA4, newEMA, nextMonthNormalized]);
     currentWindow = nextWindow;
   }
   

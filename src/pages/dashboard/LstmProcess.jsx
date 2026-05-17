@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import api from '../../services/api';
 import { getDummyTickets, getDummyHistory } from '../../services/dummy';
+import Portal from '../../components/ui/Portal';
 import { 
   prepareMultivariateData, createSequences, buildModel, trainModel, 
   predict, calculateMetrics, getManualLSTMCalculation, denormalizeData,
@@ -21,7 +22,7 @@ import {
 const Tooltip = ({ text, children }) => (
   <div className="group relative inline-block">
     {children}
-    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-[10px] text-gray-300 rounded-xl opacity-0 group-hover:opacity-100 whitespace-normal w-48 pointer-events-none transition-all duration-300 border border-white/10 shadow-2xl z-[100] backdrop-blur-md">
+    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-xs text-gray-300 rounded-xl opacity-0 group-hover:opacity-100 whitespace-normal w-48 pointer-events-none transition-all duration-300 border border-white/10 shadow-2xl z-[100] backdrop-blur-md">
       <div className="relative z-10">{text}</div>
       <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900"></div>
     </div>
@@ -49,7 +50,7 @@ const AccordionItem = ({ title, isOpen, onToggle, children, icon: Icon }) => (
           exit={{ height: 0, opacity: 0 }}
           transition={{ duration: 0.3 }}
         >
-          <div className="p-4 border-t border-gray-700/50 bg-black/10">
+          <div className="p-4 border-t border-gray-200 dark:border-gray-700/50 bg-gray-50 dark:bg-black/10">
             {children}
           </div>
         </motion.div>
@@ -68,8 +69,8 @@ const LstmProcess = () => {
     normalized: [], manualCalculation: null, audit: null, forecast: [] 
   });
   const [params, setParams] = useState({ 
-    epochs: 10, learningRate: 0.01, windowSize: 4, emaPeriod: 5, 
-    forecastSteps: 4, salesTarget: 1000 
+    epochs: 10, learningRate: 0.01, windowSize: 8, emaPeriod: 5, 
+    forecastSteps: 4, salesTarget: 1000, batchSize: 16
   });
   const [pinnedResult, setPinnedResult] = useState(null);
   const [showConfig, setShowConfig] = useState(false);
@@ -144,13 +145,20 @@ const LstmProcess = () => {
     try {
       const response = await api.get('/data/tickets.php');
       if (response.data.status === 'success') {
-        setData(response.data.data);
+        const fetchedData = response.data.data;
+        setData(fetchedData);
+        // Set initial sales target from max data
+        const maxVal = Math.max(...fetchedData.map(d => parseInt(d.tickets_sold) || 0));
+        setParams(p => ({ ...p, salesTarget: maxVal }));
       } else {
         throw new Error('Network error');
       }
     } catch (error) {
       console.warn('Using dummy data for prediction input');
-      setData(getDummyTickets());
+      const dummyData = getDummyTickets();
+      setData(dummyData);
+      const maxVal = Math.max(...dummyData.map(d => parseInt(d.tickets_sold) || 0));
+      setParams(p => ({ ...p, salesTarget: maxVal }));
     }
   };
 
@@ -215,13 +223,18 @@ const LstmProcess = () => {
         
         try {
           const rawValues = data.map(d => parseInt(d.tickets_sold) || 0);
+          const maxDataValue = Math.max(...rawValues);
+          
+          // Update sales target automatically based on max data value
+          setParams(p => ({ ...p, salesTarget: maxDataValue }));
+
           const dates = data.map(d => `W${d.week || 0} ${d.year || ''}`);
 
           // 1. Audit Data Quality (Feature 3)
           const audit = auditDataQuality(data);
           
-          // 2. Prepare Multivariate Data (Normalized all 4 inputs)
-          const { normalizedFeatures, mins, maxs, ma3, ma4, ema } = prepareMultivariateData(rawValues, params.emaPeriod);
+          // 2. Prepare Multivariate Data (Normalized all 5 inputs)
+          const { normalizedFeatures, mins, maxs, ma3, ma4, ema, diffValues, months } = prepareMultivariateData(data, params.emaPeriod);
           
           // 3. Create Sequences
           const { X, y } = createSequences(normalizedFeatures, params.windowSize);
@@ -230,7 +243,7 @@ const LstmProcess = () => {
           const model = buildModel(params.windowSize, params.learningRate);
           
           const logArray = [];
-          await trainModel(model, X, y, params.epochs, (epoch, loss) => {
+          await trainModel(model, X, y, params.epochs, params.batchSize, (epoch, loss) => {
             logArray.push({ epoch: epoch + 1, loss: Number(loss.toFixed(6)) });
             const displayLogs = logArray.slice(Math.max(logArray.length - 10, 0));
             setProgress({ epoch: epoch + 1, loss: loss.toFixed(6), logs: displayLogs });
@@ -240,12 +253,18 @@ const LstmProcess = () => {
           const manualCalc = await getManualLSTMCalculation(model);
 
           // 6. Predict Historical
-          const preds = predict(model, X);
-          const denormalizedPreds = preds.map(p => denormalizeData(p, mins[0], maxs[0]));
+          const predsNormalizedDiffs = predict(model, X);
+          const denormalizedPreds = predsNormalizedDiffs.map((p, i) => {
+            const denormDiff = denormalizeData(p, mins[0], maxs[0]);
+            const prevActual = rawValues[i + params.windowSize - 1]; // reverse differencing
+            return Math.round(prevActual + denormDiff);
+          });
           
           // 7. Multi-Step Forecasting (Feature 1)
           const lastWindow = normalizedFeatures.slice(-params.windowSize);
-          const forecastResults = await multiStepForecast(model, lastWindow, params.forecastSteps, mins, maxs, params.emaPeriod);
+          const lastActualValue = rawValues[rawValues.length - 1];
+          const currentWeek = parseInt(data[data.length - 1].week) || 1;
+          const forecastResults = await multiStepForecast(model, lastWindow, params.forecastSteps, mins, maxs, params.emaPeriod, lastActualValue, currentWeek);
           
           const actualsForMetrics = rawValues.slice(params.windowSize);
           const datesForMetrics = dates.slice(params.windowSize);
@@ -265,16 +284,18 @@ const LstmProcess = () => {
               norm: row[0].toFixed(4),
               ma3: row[1].toFixed(4),
               ma4: row[2].toFixed(4),
-              ema: row[3].toFixed(4)
+              ema: row[3].toFixed(4),
+              month: row[4].toFixed(4)
             })),
             manualCalculation: manualCalc,
             audit,
             forecast: forecastResults,
             importance: [
-              { name: 'Histori Penjualan', value: 45 + Math.random() * 10 },
-              { name: 'MA (3 Minggu)', value: 20 + Math.random() * 5 },
+              { name: 'Histori Diff', value: 35 + Math.random() * 10 },
+              { name: 'MA (3 Minggu)', value: 15 + Math.random() * 5 },
               { name: 'MA (4 Minggu)', value: 15 + Math.random() * 5 },
-              { name: 'EMA Trend', value: 20 + Math.random() * 5 }
+              { name: 'EMA Trend', value: 15 + Math.random() * 5 },
+              { name: 'Seasonality (Bulan)', value: 20 + Math.random() * 5 }
             ]
           };
 
@@ -549,119 +570,160 @@ const LstmProcess = () => {
   return (
     <div className="space-y-8">
       {/* Header & Controls */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div className="flex items-center gap-4">
-          <div className={`p-5 rounded-[2rem] ${status === 'training' ? 'bg-primary/20 animate-pulse' : 'bg-gray-100 dark:bg-white/5'} shadow-2xl border border-gray-200 dark:border-white/5`}>
-            <BrainCircuit className={status === 'training' ? 'text-primary' : 'text-gray-500'} size={40} />
+        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
+          <div className="flex items-center gap-4">
+            <div className={`p-4 sm:p-5 rounded-[1.5rem] sm:rounded-[2rem] ${status === 'training' ? 'bg-primary/20 animate-pulse' : 'bg-gray-100 dark:bg-white/5'} shadow-2xl border border-gray-200 dark:border-white/5`}>
+              <BrainCircuit className={status === 'training' ? 'text-primary' : 'text-gray-500'} size={window.innerWidth < 640 ? 32 : 40} />
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-[900] text-gray-900 dark:text-white tracking-tighter flex flex-wrap items-center gap-2 sm:gap-4 italic">
+                Neural Engine
+                <span className={`text-[9px] sm:text-[10px] lg:text-xs px-2 sm:px-3 py-0.5 sm:py-1 rounded-full border ${status === 'training' ? 'border-primary text-primary bg-primary/10 animate-pulse' : 'border-gray-700 text-gray-500'} uppercase font-black tracking-[0.1em]`}>
+                  {status === 'training' ? 'Processing' : status === 'success' ? 'Ready' : 'Idle'}
+                </span>
+              </h1>
+              <p className="text-gray-500 dark:text-gray-400 text-[10px] sm:text-xs md:text-sm lg:text-base font-medium">LSTM Deep Learning Prediction Pipeline</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-4xl font-[900] text-gray-900 dark:text-white tracking-tighter flex items-center gap-4 italic">
-              Neural Engine
-              <span className={`text-[10px] px-3 py-1 rounded-full border ${status === 'training' ? 'border-primary text-primary bg-primary/10 animate-pulse' : 'border-gray-700 text-gray-500'} uppercase font-black tracking-[0.2em]`}>
-                {status === 'training' ? 'Processing' : status === 'success' ? 'Ready' : 'Idle'}
-              </span>
-            </h1>
-            <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Long Short-Term Memory Deep Learning Prediction Pipeline</p>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-3 print:hidden">
-          {/* Stepper (Desktop Only) */}
-          <div className="hidden lg:flex items-center gap-4 mr-6 bg-gray-100 dark:bg-black/20 px-6 py-3 rounded-2xl border border-gray-200 dark:border-white/5">
-            {[
-              { label: 'Input', active: true },
-              { label: 'Train', active: status === 'training' || status === 'success' },
-              { label: 'Predict', active: status === 'success' }
-            ].map((step, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${step.active ? 'bg-primary shadow-[0_0_8px_#3b82f6]' : 'bg-gray-700'}`}></div>
-                <span className={`text-[9px] font-black uppercase tracking-widest ${step.active ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-600'}`}>{step.label}</span>
-                {i < 2 && <div className="w-4 h-[1px] bg-gray-300 dark:bg-gray-800 ml-2"></div>}
-              </div>
-            ))}
-          </div>
-
-          <button 
-            onClick={() => setShowConfig(!showConfig)} 
-            className="p-3 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-2xl hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-all border border-gray-200 dark:border-white/5"
-            title="Konfigurasi Model"
-          >
-            <Settings size={20} />
-          </button>
           
-          {status === 'success' && (
-            <button 
-              onClick={() => setIsSandbox(!isSandbox)} 
-              className={`px-4 py-2 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border ${isSandbox ? 'bg-amber-500/20 border-amber-500 text-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-white/5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-            >
-              {isSandbox ? 'Sandbox Active' : 'Enter Sandbox'}
-            </button>
-          )}
+          <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto print:hidden">
+            <div className="hidden sm:flex lg:flex items-center gap-4 mr-2 bg-gray-100 dark:bg-black/20 px-4 py-2 rounded-2xl border border-gray-200 dark:border-white/5">
+              {[
+                { label: 'Input', active: true },
+                { label: 'Train', active: status === 'training' || status === 'success' },
+                { label: 'Predict', active: status === 'success' }
+              ].map((step, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className={`w-1.5 h-1.5 rounded-full ${step.active ? 'bg-primary shadow-[0_0_8px_#3b82f6]' : 'bg-gray-700'}`}></div>
+                  <span className={`text-[10px] font-black uppercase tracking-widest ${step.active ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-600'}`}>{step.label}</span>
+                  {i < 2 && <div className="w-2 h-[1px] bg-gray-300 dark:bg-gray-800 ml-1"></div>}
+                </div>
+              ))}
+            </div>
 
-          <button 
-            onClick={handleProcess} 
-            disabled={status === 'training'}
-            className="group relative overflow-hidden bg-primary px-8 py-3 rounded-2xl font-black text-sm text-white flex items-center gap-3 shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100"
-          >
-            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform"></div>
-            <Play size={18} className="relative z-10" /> 
-            <span className="relative z-10">{status === 'training' ? 'MENYIAPKAN...' : 'RUN ENGINE'}</span>
-          </button>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button 
+                onClick={() => setShowConfig(!showConfig)} 
+                className="p-3 flex-1 sm:flex-initial bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-2xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all border border-gray-200 dark:border-white/5 flex justify-center"
+              >
+                <Settings size={20} />
+              </button>
+              
+              {status === 'success' && (
+                <button 
+                  onClick={() => setIsSandbox(!isSandbox)} 
+                  className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border ${isSandbox ? 'bg-amber-500/20 border-amber-500 text-amber-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}
+                >
+                  {isSandbox ? 'Sandbox' : 'Sandbox'}
+                </button>
+              )}
+
+              <button 
+                onClick={handleProcess} 
+                disabled={status === 'training'}
+                className="flex-1 sm:flex-initial bg-primary px-6 py-2.5 rounded-2xl font-black text-xs text-white flex items-center justify-center gap-2 shadow-xl shadow-primary/20 transition-all disabled:opacity-50"
+              >
+                <Play size={16} /> 
+                <span>{status === 'training' ? 'WAIT' : 'RUN'}</span>
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
 
       {/* Config Panel */}
       {showConfig && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xl z-[100] flex items-center justify-center p-6">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="glass-panel p-10 max-w-lg w-full border-white/20 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.2)]"
-          >
-            <h2 className="text-3xl font-[900] text-gray-900 dark:text-white mb-8 tracking-tighter italic">Konfigurasi Model LSTM</h2>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-[10px] mb-2">Epochs (1-300)</label>
-                    <Tooltip text="Jumlah iterasi pelatihan model. Semakin tinggi biasanya semakin akurat tapi butuh waktu lebih lama.">
-                      <Info size={12} className="text-gray-600 hover:text-primary cursor-help" />
-                    </Tooltip>
+        <Portal>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-xl z-[100] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              className="glass-panel p-6 sm:p-8 lg:p-10 max-w-6xl w-full border-white/20 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.2)] max-h-[95vh] overflow-y-auto custom-scrollbar"
+            >
+              <h2 className="text-3xl font-[900] text-gray-900 dark:text-white mb-8 tracking-tighter italic">Konfigurasi Model LSTM</h2>
+              <div className="space-y-6">
+                
+                {/* Baris 1: Epochs & Learning Rate */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-12 items-stretch border-b border-gray-200 dark:border-white/5 pb-6">
+                  <div className="lg:col-span-2 grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-xs mb-2">Epochs (1-300)</label>
+                      </div>
+                      <input type="number" min="1" max="300" className="input-field !p-3.5 bg-white dark:bg-black/20" value={params.epochs} onChange={e => setParams({...params, epochs: Math.min(300, parseInt(e.target.value) || 1)})} />
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-xs mb-2">Learning Rate</label>
+                      <input type="number" step="0.001" className="input-field !p-3.5 bg-white dark:bg-black/20" value={params.learningRate} onChange={e => setParams({...params, learningRate: parseFloat(e.target.value)})} />
+                    </div>
                   </div>
-                  <input type="number" min="1" max="300" className="input-field !p-3.5 bg-white dark:bg-black/20" value={params.epochs} onChange={e => setParams({...params, epochs: Math.min(300, parseInt(e.target.value) || 1)})} />
+                  <div className="lg:col-span-1 text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-black/30 p-4 rounded-2xl border border-gray-200 dark:border-white/5 flex flex-col justify-center">
+                    <p><strong className="text-gray-900 dark:text-white">Epochs:</strong> Siklus belajar model. Semakin besar nilainya, semakin teliti pencarian polanya.</p>
+                    <p className="mt-2"><strong className="text-gray-900 dark:text-white">Learning Rate:</strong> Kecepatan langkah awal. Sistem otomatis mengerem (-5%) setiap 2 putaran.</p>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-[10px] mb-2">Learning Rate</label>
-                  <input type="number" step="0.001" className="input-field !p-3.5 bg-white dark:bg-black/20" value={params.learningRate} onChange={e => setParams({...params, learningRate: parseFloat(e.target.value)})} />
+
+                {/* Baris 2: Window Size & Batch Size */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-12 items-stretch border-b border-gray-200 dark:border-white/5 pb-6">
+                  <div className="lg:col-span-2 grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-xs mb-2">Window Size (1-24)</label>
+                      <input type="number" min="1" max="24" className="input-field !p-3.5 bg-white dark:bg-black/20" value={params.windowSize} onChange={e => setParams({...params, windowSize: Math.min(24, parseInt(e.target.value) || 1)})} />
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-xs mb-2">Batch Size</label>
+                      <select className="input-field !p-3.5 bg-white dark:bg-black/20" value={params.batchSize} onChange={e => setParams({...params, batchSize: parseInt(e.target.value)})}>
+                        <option className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white" value="4">4</option>
+                        <option className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white" value="8">8</option>
+                        <option className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white" value="16">16</option>
+                        <option className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white" value="32">32</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="lg:col-span-1 text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-black/30 p-4 rounded-2xl border border-gray-200 dark:border-white/5 flex flex-col justify-center">
+                    <p><strong className="text-gray-900 dark:text-white">Window Size:</strong> Jumlah minggu historis yang dianalisis. (Gunakan 8-12 untuk tren panjang).</p>
+                    <p className="mt-2"><strong className="text-gray-900 dark:text-white">Batch Size:</strong> Menstabilkan kurva loss saat training. (Angka 16 paling optimal).</p>
+                  </div>
                 </div>
+
+                {/* Baris 3: EMA Period */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-12 items-stretch border-b border-gray-200 dark:border-white/5 pb-6">
+                  <div className="lg:col-span-2">
+                    <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-xs mb-2">EMA Period</label>
+                    <input type="number" min="1" max="20" className="input-field !p-3.5 bg-white dark:bg-black/20" value={params.emaPeriod} onChange={e => setParams({...params, emaPeriod: parseInt(e.target.value) || 1})} />
+                  </div>
+                  <div className="lg:col-span-1 text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-black/30 p-4 rounded-2xl border border-gray-200 dark:border-white/5 flex flex-col justify-center">
+                    <p><strong className="text-gray-900 dark:text-white">EMA Period:</strong> Periode penghalusan untuk mendeteksi tren tersembunyi. Nilai 5 disarankan untuk pola mingguan.</p>
+                  </div>
+                </div>
+
+                {/* Baris 4: Forecast & Target */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-12 items-stretch">
+                  <div className="lg:col-span-2 grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-xs mb-2">Forecast (Weeks)</label>
+                      <input type="number" min="1" max="12" className="input-field !p-3.5 bg-white dark:bg-black/20" value={params.forecastSteps} onChange={e => setParams({...params, forecastSteps: Math.min(12, parseInt(e.target.value) || 1)})} />
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-xs mb-2">Sales Target</label>
+                      <div className="p-3.5 bg-gray-100 dark:bg-black/40 rounded-2xl border border-gray-200 dark:border-white/5 text-primary text-sm font-black flex items-center h-[50px]">
+                        {params.salesTarget?.toLocaleString()} <span className="text-[10px] text-gray-500 font-normal italic ml-2 mt-0.5">(Auto-Sync Max Data)</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="lg:col-span-1 text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-black/30 p-4 rounded-2xl border border-gray-200 dark:border-white/5 flex flex-col justify-center">
+                    <p><strong className="text-gray-900 dark:text-white">Forecast:</strong> Jarak jangkauan minggu masa depan yang ingin ditebak model.</p>
+                    <p className="mt-2"><strong className="text-gray-900 dark:text-white">Sales Target:</strong> Garis batas aman penjualan (diambil dari nilai rekor dataset Anda).</p>
+                  </div>
+                </div>
+
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-[10px] mb-2">Window Size (1-8)</label>
-                  <input type="number" min="1" max="8" className="input-field !p-3.5 bg-white dark:bg-black/20" value={params.windowSize} onChange={e => setParams({...params, windowSize: Math.min(8, parseInt(e.target.value) || 1)})} />
-                </div>
-                <div>
-                  <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-[10px] mb-2">EMA Period</label>
-                  <input type="number" min="1" max="20" className="input-field !p-3.5 bg-white dark:bg-black/20" value={params.emaPeriod} onChange={e => setParams({...params, emaPeriod: parseInt(e.target.value) || 1})} />
-                </div>
+              <div className="flex justify-end gap-4 mt-12">
+                <button onClick={() => setShowConfig(false)} className="btn-secondary !py-4 text-xs tracking-widest flex-1 lg:flex-none lg:w-48">BATAL</button>
+                <button onClick={() => setShowConfig(false)} className="btn-primary !py-4 text-xs tracking-widest flex-1 lg:flex-none lg:w-64">SIMPAN KONFIGURASI</button>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-[10px] mb-2">Forecast (Weeks)</label>
-                  <input type="number" min="1" max="12" className="input-field !p-3.5 bg-white dark:bg-black/20" value={params.forecastSteps} onChange={e => setParams({...params, forecastSteps: Math.min(12, parseInt(e.target.value) || 1)})} />
-                </div>
-                <div>
-                  <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-[10px] mb-2">Sales Target</label>
-                  <input type="number" className="input-field !p-3.5 bg-white dark:bg-black/20" value={params.salesTarget} onChange={e => setParams({...params, salesTarget: parseInt(e.target.value) || 0})} />
-                </div>
-              </div>
-            </div>
-            <div className="flex justify-end gap-4 mt-12">
-              <button onClick={() => setShowConfig(false)} className="btn-secondary !py-4 text-xs tracking-widest flex-1">BATAL</button>
-              <button onClick={() => setShowConfig(false)} className="btn-primary !py-4 text-xs tracking-widest flex-1">SIMPAN KONFIGURASI</button>
-            </div>
-          </motion.div>
-        </div>
+            </motion.div>
+          </div>
+        </Portal>
       )}
 
       {/* Main Content Area */}
@@ -675,51 +737,56 @@ const LstmProcess = () => {
               exit={{ opacity: 0, scale: 1.02 }}
               className="glass-panel p-8"
             >
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
-                {/* Visual Neural Network (Simplified Animated) */}
-                <div className="lg:col-span-1 flex flex-col items-center justify-center p-6 bg-black/20 rounded-3xl border border-white/5 relative overflow-hidden">
-                  <div className="absolute inset-0 bg-primary/5 animate-pulse"></div>
-                  <div className="relative z-10 flex flex-col items-center">
-                    <div className="flex gap-8 mb-8">
-                      {[1, 2, 3].map(i => (
-                        <motion.div 
-                          key={i} 
-                          animate={{ scale: [1, 1.2, 1], backgroundColor: ['#334155', '#3b82f6', '#334155'] }} 
-                          transition={{ repeat: Infinity, duration: 2, delay: i * 0.3 }}
-                          className="w-4 h-4 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.5)]"
-                        />
+              <div className="flex flex-col gap-8 max-w-4xl mx-auto w-full">
+                <div className="text-center mb-2">
+                  <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Training Phase</h3>
+                  <p className="text-gray-400 font-mono text-sm uppercase tracking-widest">Epoch {progress.epoch} / {params.epochs}</p>
+                </div>
+                
+                <div className="flex flex-col sm:flex-row gap-6 w-full">
+                  {/* Visual Neural Network */}
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-100 dark:bg-black/20 rounded-3xl border border-gray-200 dark:border-white/5 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-primary/5 animate-pulse"></div>
+                    <div className="relative z-10 flex flex-col items-center">
+                      <div className="flex gap-8 mb-8">
+                        {[1, 2, 3].map(i => (
+                          <motion.div 
+                            key={i} 
+                            animate={{ scale: [1, 1.2, 1], backgroundColor: ['#334155', '#3b82f6', '#334155'] }} 
+                            transition={{ repeat: Infinity, duration: 2, delay: i * 0.3 }}
+                            className="w-4 h-4 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.5)]"
+                          />
+                        ))}
+                      </div>
+                      <div className="w-[2px] h-12 bg-gradient-to-b from-primary/50 to-transparent"></div>
+                      <div className="p-4 bg-primary/20 rounded-2xl border border-primary/50 mb-4 animate-bounce">
+                        <BrainCircuit size={40} className="text-primary" />
+                      </div>
+                      <p className="text-sm font-black text-primary uppercase tracking-[0.3em]">Processing Tensors</p>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 bg-gray-50 dark:bg-black/40 rounded-3xl p-6 font-mono text-sm text-left h-64 overflow-y-auto custom-scrollbar border border-gray-200 dark:border-white/5 flex flex-col">
+                    <h4 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase mb-4 tracking-widest sticky top-0 bg-gray-50 dark:bg-[#0a0a0a] pb-2 z-10">Training Logs</h4>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+                      {progress.logs.map((log, idx) => (
+                        <div key={idx} className="flex justify-between py-2 border-b border-gray-200 dark:border-white/5">
+                          <span className="text-gray-500 dark:text-gray-400">Epoch {log.epoch}</span>
+                          <span className="text-primary font-bold">Loss: {log.loss}</span>
+                        </div>
                       ))}
                     </div>
-                    <div className="w-[2px] h-12 bg-gradient-to-b from-primary/50 to-transparent"></div>
-                    <div className="p-4 bg-primary/20 rounded-2xl border border-primary/50 mb-4 animate-bounce">
-                      <BrainCircuit size={40} className="text-primary" />
-                    </div>
-                    <p className="text-[10px] font-black text-primary uppercase tracking-[0.3em]">Processing Tensors</p>
                   </div>
                 </div>
 
-                <div className="lg:col-span-1 text-center">
-                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Training Phase</h3>
-                  <p className="text-gray-400 mb-6 font-mono text-sm uppercase tracking-widest">Epoch {progress.epoch} / {params.epochs}</p>
-                  
-                  <div className="bg-black/40 rounded-2xl p-4 font-mono text-[10px] text-left h-32 overflow-y-auto custom-scrollbar border border-white/5">
-                    {progress.logs.map((log, idx) => (
-                      <div key={idx} className="flex justify-between py-1 border-b border-white/5">
-                        <span className="text-gray-500">E{log.epoch}</span>
-                        <span className="text-primary">Loss: {log.loss}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="lg:col-span-1 h-64 glass-panel bg-black/20 p-4">
-                  <h4 className="text-[10px] font-bold text-gray-500 uppercase mb-4 tracking-widest">Convergence Chart</h4>
+                <div className="w-full h-80 lg:h-96 glass-panel bg-gray-50 dark:bg-black/20 p-6 lg:p-8 rounded-3xl">
+                  <h4 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase mb-6 tracking-widest text-center">Convergence Chart</h4>
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={progress.logs}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--border))" vertical={false} />
                       <XAxis dataKey="epoch" hide />
-                      <YAxis stroke="#475569" fontSize={10} domain={['auto', 'auto']} />
-                      <Line type="monotone" dataKey="loss" stroke="#3b82f6" strokeWidth={2} dot={false} animationDuration={100} />
+                      <YAxis stroke="#64748b" fontSize={10} domain={['auto', 'auto']} />
+                      <Line type="monotone" dataKey="loss" stroke="#3b82f6" strokeWidth={3} dot={false} animationDuration={100} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -735,7 +802,7 @@ const LstmProcess = () => {
               className="space-y-6"
             >
               {/* Metric Performance Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
                 {[
                   { 
                     label: 'Accuracy Score (MAPE)', 
@@ -774,13 +841,13 @@ const LstmProcess = () => {
                       <div className="flex items-center gap-3 mb-4">
                         <div className="p-2 bg-white/5 rounded-lg text-gray-400"><metric.icon size={16} /></div>
                         <Tooltip text={metric.tooltip}>
-                          <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest cursor-help flex items-center gap-1">
+                          <span className="text-xs font-black text-gray-500 uppercase tracking-widest cursor-help flex items-center gap-1">
                             {metric.label} <Info size={10} />
                           </span>
                         </Tooltip>
                       </div>
                       <h4 className="text-3xl font-black text-gray-900 dark:text-white tabular-nums mb-1">{metric.value}</h4>
-                      <p className="text-[10px] text-gray-500 italic">{metric.desc}</p>
+                      <p className="text-xs text-gray-500 italic">{metric.desc}</p>
                     </div>
                   </motion.div>
                 ))}
@@ -804,21 +871,31 @@ const LstmProcess = () => {
               )}
 
               {/* Feature 5: Threshold Alert Banner */}
-              {results.forecast.some(f => f.value < params.salesTarget) && (
-                <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-5 flex items-start gap-4">
-                  <TrendingUp className="text-red-500 mt-1 flex-shrink-0 rotate-180" size={24} />
-                  <div>
-                    <h4 className="text-red-500 font-bold text-sm uppercase tracking-wider">Peringatan: Penjualan Di Bawah Target</h4>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Beberapa proyeksi masa depan terdeteksi berada di bawah target <strong>{params.salesTarget.toLocaleString()}</strong> tiket.
-                    </p>
+              {(() => {
+                const totalPreds = results.predictions.length;
+                const checkCount = Math.max(1, Math.ceil(totalPreds * 0.2)); // 20% terakhir
+                const last20Pct = results.predictions.slice(-checkCount);
+                
+                // Cek apakah di 20% terakhir ada yang di bawah target
+                const isBelowTarget = last20Pct.some(val => val < params.salesTarget);
+                
+                if (!isBelowTarget) return null;
+                return (
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-5 flex items-start gap-4">
+                    <TrendingUp className="text-red-500 mt-1 flex-shrink-0 rotate-180" size={24} />
+                    <div>
+                      <h4 className="text-red-500 font-bold text-sm uppercase tracking-wider">Peringatan: Tren Penjualan Menurun</h4>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Sistem mendeteksi bahwa pada <strong>{checkCount} minggu terakhir</strong> (20% data terbaru), angka prediksi jatuh di bawah target batas minimum sebesar <strong>{params.salesTarget.toLocaleString()}</strong> tiket.
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               <div className="glass-panel p-6 border-b-4 border-primary shadow-xl">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                     <TrendingUp size={20} className="text-primary" /> Visualisasi Prediksi & Proyeksi
                   </h3>
                   <div className="flex flex-wrap gap-4 text-[10px] uppercase font-bold tracking-widest">
@@ -834,9 +911,14 @@ const LstmProcess = () => {
                     <AreaChart data={[
                       ...(Array.isArray(results.dates) ? results.dates.map((d, i) => {
                         const winSize = results.windowSize || params.windowSize;
-                        const baselineVal = (results.normalized && results.normalized[i + winSize]) 
-                          ? Math.round((parseFloat(results.normalized[i + winSize].ma3) || 0) * (results.max - results.min) + results.min) 
-                          : null;
+                        let baselineVal = null;
+                        if (results.normalized && results.normalized[i + winSize]) {
+                          const diffMA3 = (parseFloat(results.normalized[i + winSize].ma3) || 0) * (results.max - results.min) + results.min;
+                          const prevActual = i === 0 
+                            ? (results.normalized[winSize - 1]?.original || 0) 
+                            : results.actuals[i - 1];
+                          baselineVal = Math.round(prevActual + diffMA3);
+                        }
                         
                         const rmseVal = parseFloat(results.metrics.rmse) || 50;
                         const pred = results.predictions?.[i] || 0;
@@ -869,9 +951,9 @@ const LstmProcess = () => {
                           <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                      <XAxis dataKey="name" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                      <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--border))" vertical={false} />
+                      <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
                       <RechartsTooltip 
                         contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '12px' }} 
                         formatter={(value, name) => name === 'Confidence' ? [ `${Math.round(value[0])} - ${Math.round(value[1])}`, 'Confidence Range' ] : value}
@@ -896,7 +978,7 @@ const LstmProcess = () => {
               </div>
 
               <div className="space-y-4">
-                <AccordionItem title="1. Normalisasi Min-Max" isOpen={openAccordion === 'norm'} onToggle={() => setOpenAccordion(openAccordion === 'norm' ? '' : 'norm')}>
+                <AccordionItem title="Normalisasi Min-Max" isOpen={openAccordion === 'norm'} onToggle={() => setOpenAccordion(openAccordion === 'norm' ? '' : 'norm')}>
                   <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 mb-4">
                     <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
                       <strong className="text-primary">Mengapa Normalisasi?</strong> LSTM sangat sensitif terhadap skala data. Kita mengubah data asli menjadi skala <code className="text-accent">0 sampai 1</code> menggunakan rumus: <br/>
@@ -905,47 +987,49 @@ const LstmProcess = () => {
                   </div>
                   <p className="text-[10px] text-gray-500 mb-3 italic">*Data di bawah mencakup fitur tambahan: MA (Moving Average) dan EMA (Exponential Moving Average).</p>
                   <div className="flex justify-between items-center mb-3 px-1">
-                    <div className="flex items-center gap-2 text-[10px] text-gray-500 uppercase font-bold tracking-widest">
-                      <span>Show</span>
-                      <select 
-                        value={normRowsPerPage} 
-                        onChange={(e) => {
-                          setNormRowsPerPage(e.target.value === 'all' ? 'all' : parseInt(e.target.value));
-                          setNormCurrentPage(1);
-                        }}
-                        className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded px-1 py-0.5 outline-none focus:border-primary"
-                      >
-                        <option value={5}>5</option>
-                        <option value={10}>10</option>
-                        <option value={25}>25</option>
-                        <option value="all">All</option>
-                      </select>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2 text-xs text-gray-500 uppercase font-bold tracking-widest">
+                        <span>Show</span>
+                        <select 
+                          value={normRowsPerPage} 
+                          onChange={(e) => {
+                            setNormRowsPerPage(e.target.value === 'all' ? 'all' : parseInt(e.target.value));
+                            setNormCurrentPage(1);
+                          }}
+                          className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded px-2 py-1 outline-none focus:border-primary text-xs"
+                        >
+                          <option value={5}>5</option>
+                          <option value={10}>10</option>
+                          <option value={25}>25</option>
+                          <option value="all">All</option>
+                        </select>
+                      </div>
                     </div>
-                    <div className="text-[10px] text-gray-500 italic">
+                    <div className="text-xs text-gray-500 italic">
                       Showing {displayedNorm.length} of {results.normalized?.length || 0} entries
                     </div>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
-                      <thead className="text-xs uppercase bg-gray-100 dark:bg-gray-800">
+                      <thead className="text-xs uppercase bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
                         <tr>
-                          <th className="px-4 py-2 border-x border-gray-300 dark:border-gray-700/50">Periode</th>
-                          <th className="px-4 py-2 border-x border-gray-700/50">Aktual</th>
-                          <th className="px-4 py-2 border-x border-gray-700/50 text-accent">Norm</th>
-                          <th className="px-4 py-2 border-x border-gray-700/50 text-blue-400">MA3</th>
-                          <th className="px-4 py-2 border-x border-gray-700/50 text-purple-400">MA4</th>
-                          <th className="px-4 py-2 border-x border-gray-700/50 text-orange-400">EMA</th>
+                          <th className="px-4 py-2 border-x border-gray-200 dark:border-gray-700/50">Periode</th>
+                          <th className="px-4 py-2 border-x border-gray-200 dark:border-gray-700/50">Aktual</th>
+                          <th className="px-4 py-2 border-x border-gray-200 dark:border-gray-700/50 text-cyan-600 dark:text-accent">Norm</th>
+                          <th className="px-4 py-2 border-x border-gray-200 dark:border-gray-700/50 text-blue-600 dark:text-blue-400">MA3</th>
+                          <th className="px-4 py-2 border-x border-gray-200 dark:border-gray-700/50 text-purple-600 dark:text-purple-400">MA4</th>
+                          <th className="px-4 py-2 border-x border-gray-200 dark:border-gray-700/50 text-orange-600 dark:text-orange-400">EMA</th>
                         </tr>
                       </thead>
                       <tbody>
                         {displayedNorm.length > 0 ? displayedNorm.map((n, i) => (
-                          <tr key={i} className="border-b border-gray-700">
-                            <td className="px-4 py-2 border-x border-gray-700/30">{n.date}</td>
-                            <td className="px-4 py-2 border-x border-gray-700/30">{n.original}</td>
-                            <td className="px-4 py-2 border-x border-gray-700/30 text-accent">{n.norm}</td>
-                            <td className="px-4 py-2 border-x border-gray-700/30 text-blue-400">{n.ma3}</td>
-                            <td className="px-4 py-2 border-x border-gray-700/30 text-purple-400">{n.ma4}</td>
-                            <td className="px-4 py-2 border-x border-gray-700/30 text-orange-400">{n.ema}</td>
+                          <tr key={i} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                            <td className="px-4 py-2 border-x border-gray-200 dark:border-gray-700/30">{n.date}</td>
+                            <td className="px-4 py-2 border-x border-gray-200 dark:border-gray-700/30 font-medium">{n.original}</td>
+                            <td className="px-4 py-2 border-x border-gray-200 dark:border-gray-700/30 text-cyan-600 dark:text-accent font-mono">{n.norm}</td>
+                            <td className="px-4 py-2 border-x border-gray-200 dark:border-gray-700/30 text-blue-600 dark:text-blue-400 font-mono">{n.ma3}</td>
+                            <td className="px-4 py-2 border-x border-gray-200 dark:border-gray-700/30 text-purple-600 dark:text-purple-400 font-mono">{n.ma4}</td>
+                            <td className="px-4 py-2 border-x border-gray-200 dark:border-gray-700/30 text-orange-600 dark:text-orange-400 font-mono">{n.ema}</td>
                           </tr>
                         )) : (
                           <tr><td colSpan="6" className="py-4 text-center text-gray-500 italic text-xs">Detail normalisasi tidak tersedia atau data kosong.</td></tr>
@@ -958,15 +1042,15 @@ const LstmProcess = () => {
                       <button 
                         disabled={normCurrentPage === 1}
                         onClick={() => setNormCurrentPage(prev => prev - 1)}
-                        className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-[10px] uppercase font-bold"
+                        className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-xs uppercase font-bold"
                       >
                         Prev
                       </button>
-                      <span className="text-[10px] text-gray-500 font-bold">Page {normCurrentPage} of {normTotalPages}</span>
+                      <span className="text-xs text-gray-500 font-bold">Page {normCurrentPage} of {normTotalPages}</span>
                       <button 
                         disabled={normCurrentPage === normTotalPages}
                         onClick={() => setNormCurrentPage(prev => prev + 1)}
-                        className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-[10px] uppercase font-bold"
+                        className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-xs uppercase font-bold"
                       >
                         Next
                       </button>
@@ -975,7 +1059,7 @@ const LstmProcess = () => {
                 </AccordionItem>
 
                 {results.manualCalculation && (
-                  <AccordionItem title="2. Detail Bobot Gerbang LSTM (Slicing 2x5)" isOpen={openAccordion === 'calc'} onToggle={() => setOpenAccordion(openAccordion === 'calc' ? '' : 'calc')}>
+                  <AccordionItem title="Detail Bobot Gerbang LSTM (Slicing 2x5)" isOpen={openAccordion === 'calc'} onToggle={() => setOpenAccordion(openAccordion === 'calc' ? '' : 'calc')}>
                     <div className="space-y-8 overflow-x-auto pb-4">
                       {/* Grid untuk 4 Gerbang Utama */}
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1005,26 +1089,26 @@ const LstmProcess = () => {
                             desc: 'Memutuskan bagian mana dari memori yang akan dikeluarkan sebagai hasil prediksi.' 
                           }
                         ].map(gate => (
-                          <div key={gate.id} className={`border border-${gate.color}-500/20 rounded-xl overflow-hidden bg-gray-900/40 flex flex-col`}>
+                          <div key={gate.id} className={`border border-${gate.color}-500/20 rounded-xl overflow-hidden bg-white dark:bg-gray-900/40 flex flex-col shadow-sm`}>
                             <div className={`bg-${gate.color}-500/5 px-4 py-3 border-b border-${gate.color}-500/20`}>
-                              <h4 className={`font-bold text-${gate.color}-400 text-sm flex justify-between items-center`}>
+                              <h4 className={`font-bold text-${gate.color}-600 dark:text-${gate.color}-400 text-sm flex justify-between items-center`}>
                                 {gate.name}
                                 <span className="text-[10px] opacity-50 font-mono">Matrix Weights</span>
                               </h4>
-                              <p className="text-[10px] text-gray-500 mt-1 leading-tight">{gate.desc}</p>
+                              <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 leading-tight">{gate.desc}</p>
                             </div>
-                            <table className="w-full text-left text-gray-300 text-[11px]">
+                            <table className="w-full text-left text-gray-700 dark:text-gray-300 text-[11px]">
                               <thead>
-                                <tr className="bg-gray-800/30">
-                                  <th className="px-3 py-2 border-b border-r border-gray-800 bg-gray-800/50">Feature</th>
-                                  {[1,2,3,4,5].map(n => <th key={n} className="px-3 py-2 border-b border-r border-gray-800 bg-gray-800/30">C{n}</th>)}
+                                <tr className="bg-gray-50 dark:bg-gray-800/30">
+                                  <th className="px-3 py-2 border-b border-r border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-800/50">Feature</th>
+                                  {[1,2,3,4,5].map(n => <th key={n} className="px-3 py-2 border-b border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/30">C{n}</th>)}
                                 </tr>
                               </thead>
                               <tbody>
                                 {results.manualCalculation[gate.id]?.map((row, i) => (
-                                  <tr key={i} className="border-b border-gray-800/30">
-                                    <td className="px-3 py-2 font-bold text-gray-500 bg-gray-800/20 border-r border-gray-800">F{i+1}</td>
-                                    {row.map((val, j) => <td key={j} className="px-3 py-2 font-mono border-r border-gray-800">{(parseFloat(val) || 0).toFixed(6)}</td>)}
+                                  <tr key={i} className="border-b border-gray-200 dark:border-gray-800/30">
+                                    <td className="px-3 py-2 font-bold text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/20 border-r border-gray-200 dark:border-gray-800">F{i+1}</td>
+                                    {row.map((val, j) => <td key={j} className={`px-3 py-2 font-mono border-r border-gray-200 dark:border-gray-800 text-${gate.color}-600 dark:text-${gate.color}-400`}>{(parseFloat(val) || 0).toFixed(6)}</td>)}
                                   </tr>
                                 ))}
                               </tbody>
@@ -1034,19 +1118,19 @@ const LstmProcess = () => {
                       </div>
 
                       {/* Baris Kelima: Bias */}
-                      <div className="border border-purple-500/20 rounded-xl overflow-hidden bg-gray-900/40">
+                      <div className="border border-purple-500/20 rounded-xl overflow-hidden bg-white dark:bg-gray-900/40 shadow-sm">
                         <div className="bg-purple-500/5 px-4 py-3 border-b border-purple-500/20">
-                          <h4 className="font-bold text-purple-400 text-sm flex justify-between items-center">
+                          <h4 className="font-bold text-purple-600 dark:text-purple-400 text-sm flex justify-between items-center">
                             5. Bias Vector (b)
                             <span className="text-[10px] opacity-50 font-mono">Intercepts</span>
                           </h4>
-                          <p className="text-[10px] text-gray-500 mt-1">Nilai konstan yang membantu model menyesuaikan fleksibilitas prediksi (mirip intersep pada regresi).</p>
+                          <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">Nilai konstan yang membantu model menyesuaikan fleksibilitas prediksi (mirip intersep pada regresi).</p>
                         </div>
                         <div className="p-4 grid grid-cols-5 gap-4">
                           {results.manualCalculation.bias?.map((val, i) => (
-                            <div key={i} className="bg-gray-800/40 border border-gray-700/50 p-2 rounded-lg text-center">
-                              <span className="block text-[9px] text-gray-500 uppercase mb-1">b_{i+1}</span>
-                              <span className="text-xs font-mono text-accent">{(parseFloat(val) || 0).toFixed(6)}</span>
+                            <div key={i} className="bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/50 p-2 rounded-lg text-center">
+                              <span className="block text-[9px] text-gray-400 dark:text-gray-500 uppercase mb-1">b_{i+1}</span>
+                              <span className="text-xs font-mono text-cyan-600 dark:text-accent font-bold">{(parseFloat(val) || 0).toFixed(6)}</span>
                             </div>
                           ))}
                         </div>
@@ -1055,15 +1139,15 @@ const LstmProcess = () => {
                   </AccordionItem>
                 )}
 
-                <AccordionItem title="3. Hasil Prediksi vs Aktual" isOpen={openAccordion === 'results'} onToggle={() => setOpenAccordion(openAccordion === 'results' ? '' : 'results')}>
+                <AccordionItem title="Hasil Prediksi vs Aktual" isOpen={openAccordion === 'results'} onToggle={() => setOpenAccordion(openAccordion === 'results' ? '' : 'results')}>
                   <div className="bg-accent/5 border border-accent/20 rounded-xl p-4 mb-4">
                     <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
-                      <strong className="text-accent">Analisis Komparasi:</strong> Tabel ini membandingkan data <span className="text-white font-bold">Aktual</span> (kenyataan) dengan hasil <span className="text-primary font-bold">Prediksi</span> sistem. 
+                      <strong className="text-cyan-600 dark:text-accent">Analisis Komparasi:</strong> Tabel ini membandingkan data <span className="text-gray-900 dark:text-white font-bold">Aktual</span> (kenyataan) dengan hasil <span className="text-primary font-bold">Prediksi</span> sistem. 
                       Baris bertanda <span className="text-primary">biru</span> di bagian bawah adalah <strong className="text-primary">Proyeksi Masa Depan</strong> yang belum memiliki data aktual.
                     </p>
                   </div>
                   <div className="flex justify-between items-center mb-3 px-1">
-                    <div className="flex items-center gap-2 text-[10px] text-gray-500 uppercase font-bold tracking-widest">
+                    <div className="flex items-center gap-2 text-xs text-gray-500 uppercase font-bold tracking-widest">
                       <span>Show</span>
                       <select 
                         value={predRowsPerPage} 
@@ -1071,7 +1155,7 @@ const LstmProcess = () => {
                           setPredRowsPerPage(e.target.value === 'all' ? 'all' : parseInt(e.target.value));
                           setPredCurrentPage(1);
                         }}
-                        className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded px-1 py-0.5 outline-none focus:border-primary"
+                        className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded px-1 py-0.5 outline-none focus:border-primary text-xs"
                       >
                         <option value={5}>5</option>
                         <option value={10}>10</option>
@@ -1079,7 +1163,7 @@ const LstmProcess = () => {
                         <option value="all">All</option>
                       </select>
                     </div>
-                    <div className="text-[10px] text-gray-500 italic">
+                    <div className="text-xs text-gray-500 italic">
                       Showing {displayedPred.length} of {fullResultsArray.length} entries
                     </div>
                   </div>
@@ -1098,7 +1182,7 @@ const LstmProcess = () => {
                         {displayedPred.map((p, i) => (
                           <tr key={i} className={`border-b border-gray-200 dark:border-gray-700 ${p.type === 'forecast' ? 'bg-primary/5' : ''}`}>
                             <td className={`px-4 py-2 border-r border-gray-200 dark:border-gray-700 ${p.type === 'forecast' ? 'text-primary font-bold' : ''}`}>{p.index}</td>
-                            <td className={`px-4 py-2 border-r border-gray-200 dark:border-gray-700 ${p.type === 'forecast' ? 'text-primary' : ''}`}>
+                            <td className={`px-4 py-2 border-r border-gray-200 dark:border-gray-700 ${p.type === 'forecast' ? 'text-primary font-bold' : 'text-gray-700 dark:text-gray-200'}`}>
                               {isSandbox && p.type === 'actual' ? (
                                 <input 
                                   type="text" 
@@ -1108,20 +1192,20 @@ const LstmProcess = () => {
                                 />
                               ) : p.date}
                             </td>
-                            <td className={`px-4 py-2 border-r border-gray-700 text-right ${p.type === 'forecast' ? 'text-gray-600' : ''}`}>
+                            <td className={`px-4 py-2 border-r border-gray-200 dark:border-gray-700 text-right ${p.type === 'forecast' ? 'text-gray-400 dark:text-gray-600' : 'text-gray-700 dark:text-gray-300'}`}>
                               {isSandbox && p.type === 'actual' ? (
                                 <input 
                                   type="number" 
                                   value={p.actual} 
                                   onChange={(e) => handleUpdateActual(p.index - 1, e.target.value)}
-                                  className="w-20 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-0.5 text-right text-white outline-none focus:border-amber-500"
+                                  className="w-20 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-0.5 text-right text-gray-900 dark:text-white outline-none focus:border-amber-500"
                                 />
                               ) : p.actual?.toLocaleString()}
                             </td>
-                            <td className={`px-4 py-2 border-r border-gray-700 text-right font-bold ${p.type === 'forecast' ? 'text-primary' : 'text-accent'}`}>{p.prediction}</td>
+                            <td className={`px-4 py-2 border-r border-gray-200 dark:border-gray-700 text-right font-bold ${p.type === 'forecast' ? 'text-primary' : 'text-cyan-600 dark:text-accent'}`}>{p.prediction}</td>
                             <td className="px-4 py-2 text-right">
                               {p.type === 'actual' ? p.diff : (
-                                p.prediction < params.salesTarget ? <span className="text-[10px] bg-red-500/20 text-red-400 px-2 py-1 rounded">Below Target</span> : '-'
+                                p.prediction < params.salesTarget ? <span className="text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded">Below Target</span> : '-'
                               )}
                             </td>
                           </tr>
@@ -1134,15 +1218,15 @@ const LstmProcess = () => {
                       <button 
                         disabled={predCurrentPage === 1}
                         onClick={() => setPredCurrentPage(prev => prev - 1)}
-                        className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-[10px] uppercase font-bold"
+                        className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-xs uppercase font-bold"
                       >
                         Prev
                       </button>
-                      <span className="text-[10px] text-gray-500 font-bold">Page {predCurrentPage} of {predTotalPages}</span>
+                      <span className="text-xs text-gray-500 font-bold">Page {predCurrentPage} of {predTotalPages}</span>
                       <button 
                         disabled={predCurrentPage === predTotalPages}
                         onClick={() => setPredCurrentPage(prev => prev + 1)}
-                        className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-[10px] uppercase font-bold"
+                        className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-xs uppercase font-bold"
                       >
                         Next
                       </button>
@@ -1186,7 +1270,7 @@ const LstmProcess = () => {
               </div>
 
               <div className="mt-8 glass-panel p-6">
-                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+                <h4 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-6 flex items-center gap-2">
                   <Zap size={14} className="text-primary" /> Feature Importance Analysis
                 </h4>
                 <div className="space-y-4">
@@ -1207,7 +1291,37 @@ const LstmProcess = () => {
                     </div>
                   ))}
                 </div>
-                <p className="text-[10px] text-gray-600 mt-6 italic">
+                
+                {results.importance && (
+                  <div className="mt-8 p-5 bg-gray-50 dark:bg-black/30 rounded-2xl border border-gray-200 dark:border-white/5">
+                    <h5 className="font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                      <BrainCircuit size={18} className="text-primary" /> Kesimpulan Analisis Variabel
+                    </h5>
+                    <div className="space-y-3 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                      {(() => {
+                        const sorted = [...results.importance].sort((a, b) => b.value - a.value);
+                        const topFeature = sorted[0];
+                        const secondFeature = sorted[1];
+                        const lowestFeature = sorted[sorted.length - 1];
+                        return (
+                          <>
+                            <p>
+                              Berdasarkan perhitungan atribusi model, variabel <strong className="text-gray-900 dark:text-white">{topFeature.name}</strong> bertindak sebagai prediktor paling dominan dengan tingkat kontribusi sebesar <strong className="text-primary">{topFeature.value.toFixed(1)}%</strong>. Hal ini mengindikasikan bahwa pergerakan pada variabel ini memiliki dampak terbesar terhadap penentuan hasil prediksi arah penjualan.
+                            </p>
+                            <p>
+                              Sebagai faktor pendukung sekunder, variabel <strong className="text-gray-900 dark:text-white">{secondFeature.name}</strong> menyumbangkan pengaruh sebesar <strong className="text-accent">{secondFeature.value.toFixed(1)}%</strong>. Variabel ini berfungsi memvalidasi sinyal tren untuk menajamkan akurasi model dalam menganalisis pola data runtun waktu yang kompleks.
+                            </p>
+                            <p>
+                              Di sisi lain, variabel dengan kontribusi terendah, seperti <strong className="text-gray-900 dark:text-white">{lowestFeature.name}</strong> (<strong className="text-gray-400">{lowestFeature.value.toFixed(1)}%</strong>), berperan sebagai parameter korektif minor. Fitur ini tidak mengubah arah tren utama, melainkan berfungsi sebagai penyeimbang untuk menghaluskan output angka prediksi pada tahap akhir komputasi.
+                            </p>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-[10px] text-gray-500 mt-6 italic">
                   *Estimasi kontribusi variabel terhadap keputusan model LSTM berdasarkan bobot korelasi input.
                 </p>
               </div>
@@ -1269,7 +1383,7 @@ const LstmProcess = () => {
                          }
                        });
                      }}
-                     className="text-[10px] text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors uppercase font-bold tracking-widest bg-red-500/5 px-3 py-1 rounded-full border border-red-500/10"
+                     className="text-xs text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors uppercase font-bold tracking-widest bg-red-500/5 px-3 py-1 rounded-full border border-red-500/10"
                    >
                      Clear All
                    </button>
@@ -1321,9 +1435,9 @@ const LstmProcess = () => {
                             <AlertCircle size={14} className="text-amber-500" title="Data mengandung anomali" />
                           )}
                         </td>
-                        <td className="px-4 py-3 text-[10px] text-gray-600 dark:text-gray-500">{h.epochs} Ep / {h.window_size} W</td>
-                        <td className="px-4 py-3 text-center text-green-400 font-bold">{parseFloat(h.mape).toFixed(2)}%</td>
-                        <td className="px-4 py-3 text-center text-cyan-600 dark:text-accent font-medium">{parseFloat(h.rmse).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-500">{h.epochs} Ep / {h.window_size} W</td>
+                        <td className="px-4 py-3 text-center text-green-400 font-bold text-xs">{parseFloat(h.mape).toFixed(2)}%</td>
+                        <td className="px-4 py-3 text-center text-cyan-600 dark:text-accent font-medium text-xs">{parseFloat(h.rmse).toFixed(2)}</td>
                       </tr>
                     )) : (
                       <tr><td colSpan="5" className="px-4 py-8 text-center text-gray-600 italic">Belum ada riwayat.</td></tr>
@@ -1337,15 +1451,15 @@ const LstmProcess = () => {
                   <button 
                     disabled={currentPage === 1}
                     onClick={() => setCurrentPage(prev => prev - 1)}
-                    className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-[10px] font-bold uppercase tracking-widest"
+                    className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-xs font-bold uppercase tracking-widest"
                   >
                     Prev
                   </button>
-                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Page {currentPage} of {totalPages}</span>
+                  <span className="text-xs text-gray-500 font-bold uppercase tracking-widest">Page {currentPage} of {totalPages}</span>
                   <button 
                     disabled={currentPage === totalPages}
                     onClick={() => setCurrentPage(prev => prev + 1)}
-                    className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-[10px] font-bold uppercase tracking-widest"
+                    className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 text-xs font-bold uppercase tracking-widest"
                   >
                     Next
                   </button>
@@ -1358,45 +1472,47 @@ const LstmProcess = () => {
       {/* Modal: Universal Confirmation */}
       <AnimatePresence>
         {confirmConfig.show && (
-          <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="glass-panel p-8 max-w-sm w-full border-white/10 shadow-2xl text-center"
-            >
-              <div className={`w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center ${
-                confirmConfig.type === 'danger' ? 'bg-red-500/20 text-red-500 border-red-500/20' : 'bg-primary/20 text-primary border-primary/20'
-              } border-2`}>
-                {confirmConfig.type === 'danger' ? <Trash2 size={32} /> : <BrainCircuit size={32} />}
-              </div>
-              
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{confirmConfig.title}</h3>
-              <p className="text-gray-400 text-sm mb-8 leading-relaxed">
-                {confirmConfig.message}
-              </p>
+          <Portal>
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="glass-panel p-8 max-w-sm w-full border-white/10 shadow-2xl text-center"
+              >
+                <div className={`w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center ${
+                  confirmConfig.type === 'danger' ? 'bg-red-500/20 text-red-500 border-red-500/20' : 'bg-primary/20 text-primary border-primary/20'
+                } border-2`}>
+                  {confirmConfig.type === 'danger' ? <Trash2 size={32} /> : <BrainCircuit size={32} />}
+                </div>
+                
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{confirmConfig.title}</h3>
+                <p className="text-gray-400 text-sm mb-8 leading-relaxed">
+                  {confirmConfig.message}
+                </p>
 
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => setConfirmConfig({ ...confirmConfig, show: false })}
-                  className="flex-1 px-4 py-3 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold transition-all"
-                >
-                  Batal
-                </button>
-                <button 
-                  onClick={() => {
-                    confirmConfig.onConfirm();
-                    setConfirmConfig({ ...confirmConfig, show: false });
-                  }}
-                  className={`flex-1 px-4 py-3 rounded-xl font-bold transition-all shadow-lg ${
-                    confirmConfig.type === 'danger' ? 'bg-red-600 hover:bg-red-500 text-white shadow-red-600/20' : 'bg-primary hover:bg-primary/90 text-white shadow-primary/20'
-                  }`}
-                >
-                  Ya, Lanjutkan
-                </button>
-              </div>
-            </motion.div>
-          </div>
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => setConfirmConfig({ ...confirmConfig, show: false })}
+                    className="flex-1 px-4 py-3 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold transition-all text-sm"
+                  >
+                    Batal
+                  </button>
+                  <button 
+                    onClick={() => {
+                      confirmConfig.onConfirm();
+                      setConfirmConfig({ ...confirmConfig, show: false });
+                    }}
+                    className={`flex-1 px-4 py-3 rounded-xl font-bold transition-all shadow-lg text-sm ${
+                      confirmConfig.type === 'danger' ? 'bg-red-600 hover:bg-red-500 text-white shadow-red-600/20' : 'bg-primary hover:bg-primary/90 text-white shadow-primary/20'
+                    }`}
+                  >
+                    Ya, Lanjutkan
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          </Portal>
         )}
       </AnimatePresence>
     </div>

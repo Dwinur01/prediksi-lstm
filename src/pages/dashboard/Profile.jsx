@@ -52,13 +52,13 @@ const Profile = ({ user, setUser }) => {
       <div className="glass-panel p-8">
         <form onSubmit={handleSubmit} className="space-y-6">
           
-          <div className="flex items-center gap-6 pb-8 border-b border-gray-200 dark:border-white/5">
-            <div className="w-24 h-24 rounded-[2rem] bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center border border-primary/20 shadow-xl">
-              <User size={48} className="text-primary" />
+          <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 pb-8 border-b border-gray-200 dark:border-white/5 text-center sm:text-left">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-[1.5rem] sm:rounded-[2rem] bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center border border-primary/20 shadow-xl">
+              <User size={window.innerWidth < 640 ? 40 : 48} className="text-primary" />
             </div>
             <div>
-              <h3 className="text-2xl font-[900] text-gray-900 dark:text-white tracking-tight italic">{user?.username}</h3>
-              <p className="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">SWA Enterprise Administrator</p>
+              <h3 className="text-xl sm:text-2xl font-[900] text-gray-900 dark:text-white tracking-tight italic">{user?.username}</h3>
+              <p className="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-[0.2em]">SWA Enterprise Administrator</p>
             </div>
           </div>
 

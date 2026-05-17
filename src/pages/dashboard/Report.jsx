@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Printer, Calendar, TrendingUp, ChevronRight, FileText, BarChart3, Database } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../services/api';
 import { getDummyHistory } from '../../services/dummy';
@@ -27,26 +27,46 @@ const Report = () => {
 
   const fetchHistory = async () => {
     try {
+      setLoading(true);
       let dbHistory = [];
-      const response = await api.get('/data/predictions.php');
-      if (response.data.status === 'success') {
-        dbHistory = response.data.data;
+      try {
+        const response = await api.get('/data/predictions.php');
+        if (response.data && response.data.status === 'success' && Array.isArray(response.data.data)) {
+          dbHistory = response.data.data;
+        }
+      } catch (apiErr) {
+        console.warn('API fetch failed, falling back to offline/dummy');
       }
       
-      const offlineHistory = JSON.parse(localStorage.getItem('swa-offline-history') || '[]');
+      let offlineHistory = [];
+      try {
+        const stored = localStorage.getItem('swa-offline-history');
+        if (stored) offlineHistory = JSON.parse(stored);
+        if (!Array.isArray(offlineHistory)) offlineHistory = [];
+      } catch (lsErr) {
+        console.warn('Offline history corrupted');
+        offlineHistory = [];
+      }
+
       const combined = [...offlineHistory, ...dbHistory];
       
       setHistory(combined);
       if (combined.length > 0) {
         setSelectedReport(combined[0]);
+      } else {
+        // Jika benar-benar kosong, gunakan dummy
+        const dummy = getDummyHistory();
+        setHistory(dummy);
+        if (dummy.length > 0) setSelectedReport(dummy[0]);
       }
     } catch (error) {
-      console.warn('Using dummy history for report');
+      console.error('Critical error in fetchHistory:', error);
       const dummy = getDummyHistory();
       setHistory(dummy);
       if (dummy.length > 0) setSelectedReport(dummy[0]);
     } finally {
-      setLoading(false);
+      // Pastikan loading berhenti dalam kondisi apapun
+      setTimeout(() => setLoading(false), 300);
     }
   };
 
@@ -55,17 +75,17 @@ const Report = () => {
   };
 
   const renderKopSurat = () => (
-    <div className="bg-white pb-6 mb-8 border-b-[4px] border-double border-black relative">
-      <div className="flex items-center">
-        <div className="w-[120px] flex justify-center">
-          <div className="w-24 h-24 bg-white flex items-center justify-center overflow-hidden">
+    <div className="bg-white pb-6 mb-10 border-b-[4px] border-double border-slate-800 relative">
+      <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-0">
+        <div className="w-full sm:w-[140px] flex justify-center">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white flex items-center justify-center">
             <img src="/swa_logo.png" alt="SWA Logo" className="w-full h-full object-contain" />
           </div>
         </div>
-        <div className="flex-1 text-center pr-[120px]">
-          <h1 className="text-[26px] font-bold text-black uppercase leading-tight tracking-tight">PT. SWABINA GATRA</h1>
-          <p className="text-[16px] font-bold text-black mt-1 uppercase tracking-[0.15em] border-t border-black/20 pt-1 inline-block">Divisi Perencanaan & Pengembangan Bisnis</p>
-          <div className="mt-3 text-[11px] text-black/80 font-medium leading-relaxed font-sans">
+        <div className="flex-1 text-center sm:pr-[140px]">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 uppercase leading-none tracking-tight">PT. SWABINA GATRA</h1>
+          <p className="text-[10px] sm:text-xs font-semibold text-slate-600 mt-2 uppercase tracking-[0.15em] border-t border-slate-100 pt-1 inline-block">Divisi Perencanaan & Pengembangan Bisnis</p>
+          <div className="mt-3 text-[9px] sm:text-[10px] text-slate-400 font-medium leading-relaxed font-sans max-w-lg mx-auto">
             <p>Jl. RA Kartini No. 21A, Injen Timur, Sidomoro, Kec. Kebomas, Gresik 61122</p>
             <p>Telepon: 0811-8890-580 | Situs: www.swabina.id | Email: info@swabina.id</p>
           </div>
@@ -80,7 +100,7 @@ const Report = () => {
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
         <div className="absolute inset-0 rounded-full border-4 border-primary/20"></div>
       </div>
-      <p className="font-medium tracking-widest uppercase text-xs animate-pulse">Menyiapkan Laporan...</p>
+      <p className="font-medium tracking-widest uppercase text-sm animate-pulse">Menyiapkan Laporan...</p>
     </div>
   );
 
@@ -115,26 +135,26 @@ const Report = () => {
     >
       {/* Top Toolbar */}
       <motion.div variants={itemVariants} className="flex flex-wrap items-center justify-between gap-4 mb-8 print:hidden p-6 glass-panel border-white/5 shadow-2xl relative z-[100]">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 w-full md:w-auto">
           <div className="p-3 bg-primary/10 rounded-2xl">
             <FileText className="text-primary" size={24} />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">Management Laporan</h1>
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white tracking-tight">Management Laporan</h1>
             <p className="text-[10px] text-gray-500 uppercase tracking-[0.2em] mt-0.5">PT. Swabina Gatra Official Workspace</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="relative">
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          <div className="relative flex-1 md:flex-initial">
             <motion.button 
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => setShowMarginPop(!showMarginPop)}
-              className="bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 px-6 py-2.5 rounded-xl text-sm font-bold text-gray-600 dark:text-gray-300 flex items-center gap-2 hover:bg-gray-200 dark:hover:bg-white/10 hover:border-gray-300 dark:hover:border-white/20 transition-all"
+              className="w-full bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 px-4 sm:px-6 py-2.5 rounded-xl text-sm font-bold text-gray-600 dark:text-gray-300 flex items-center justify-center gap-2 hover:bg-gray-200 dark:hover:bg-white/10 transition-all"
             >
               <BarChart3 size={18} className="text-accent" />
-              Konfigurasi Margin
+              <span className="hidden sm:inline">Konfigurasi</span> Margin
             </motion.button>
 
             <AnimatePresence>
@@ -153,11 +173,11 @@ const Report = () => {
                     exit={{ opacity: 0, scale: 0.95, y: 10 }}
                     className="absolute top-full right-0 mt-3 w-72 glass-panel p-6 shadow-2xl z-50 border-white/10"
                   >
-                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-white/5 pb-2">Margin (mm)</h4>
+                    <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-white/5 pb-2">Margin (mm)</h4>
                     <div className="grid grid-cols-2 gap-4">
                       {['top', 'bottom', 'left', 'right'].map((side) => (
                         <div key={side} className="space-y-1">
-                          <label className="text-[9px] text-gray-500 uppercase font-black">{side}</label>
+                          <label className="text-xs text-gray-500 uppercase font-black">{side}</label>
                           <input 
                             type="number" 
                             value={margins[side]} 
@@ -177,7 +197,7 @@ const Report = () => {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={handlePrint} 
-            className="bg-white text-black px-8 py-2.5 rounded-xl font-black text-sm flex items-center gap-3 shadow-xl"
+            className="flex-1 md:flex-initial bg-white text-black px-6 sm:px-8 py-2.5 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-3 shadow-xl"
           >
             <Printer size={18} /> CETAK PDF
           </motion.button>
@@ -187,7 +207,7 @@ const Report = () => {
       {/* Archive Table */}
       <motion.div variants={itemVariants} className="w-full max-w-7xl mx-auto mb-16 print:hidden">
         <div className="flex items-center justify-between mb-4 px-2">
-          <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest flex items-center gap-3">
+          <h3 className="text-sm font-black text-gray-500 uppercase tracking-widest flex items-center gap-3">
             <Database size={14} className="text-primary" /> Riwayat Arsip
           </h3>
         </div>
@@ -196,10 +216,10 @@ const Report = () => {
             <table className="w-full text-left border-collapse">
               <thead className="sticky top-0 z-20 bg-gray-50 dark:bg-[#0f172a] shadow-lg">
                 <tr className="border-b border-white/10">
-                  <th className="p-5 border-r border-gray-200 dark:border-white/5 text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase">ID</th>
-                  <th className="p-5 border-r border-gray-200 dark:border-white/5 text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase">Waktu Run</th>
-                  <th className="p-5 border-r border-gray-200 dark:border-white/5 text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase">MAPE</th>
-                  <th className="p-5 border-r border-gray-200 dark:border-white/5 text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase">RMSE</th>
+                  <th className="p-5 border-r border-gray-200 dark:border-white/5 text-xs font-black text-gray-500 dark:text-gray-400 uppercase">ID</th>
+                  <th className="p-5 border-r border-gray-200 dark:border-white/5 text-xs font-black text-gray-500 dark:text-gray-400 uppercase">Waktu Run</th>
+                  <th className="p-5 border-r border-gray-200 dark:border-white/5 text-xs font-black text-gray-500 dark:text-gray-400 uppercase">MAPE</th>
+                  <th className="p-5 border-r border-gray-200 dark:border-white/5 text-xs font-black text-gray-500 dark:text-gray-400 uppercase">RMSE</th>
                   <th className="p-5 text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase text-right">Navigasi</th>
                 </tr>
               </thead>
@@ -213,7 +233,7 @@ const Report = () => {
                     <td className="p-5 text-right">
                       <button 
                         onClick={() => { setSelectedReport(h); window.scrollTo({ top: 450, behavior: 'smooth' }); }}
-                        className={`px-5 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${selectedReport?.id === h.id ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/10'}`}
+                        className={`px-5 py-2 rounded-xl text-xs font-black uppercase transition-all ${selectedReport?.id === h.id ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/10'}`}
                       >
                         {selectedReport?.id === h.id ? 'Previewing' : 'Lihat'}
                       </button>
@@ -244,7 +264,7 @@ const Report = () => {
                 <div id="print-area" className="text-black font-sans relative z-10" style={{ padding: `${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm` }}>
                   {renderKopSurat()}
                   
-                  <div className="flex justify-between items-start mb-8 text-[12px]">
+                  <div className="flex justify-between items-start mb-8 text-sm">
                     <div className="space-y-1">
                       <p><strong>Nomor:</strong> {selectedReport.id}/SWA-LSTM/GRK/{new Date(selectedReport.run_date).getFullYear()}</p>
                       <p><strong>Sifat:</strong> Rahasia / Terbatas</p>
@@ -253,93 +273,131 @@ const Report = () => {
                     <p className="text-right">{new Date(selectedReport.run_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
                   </div>
 
-                  <div className="text-[13px] leading-relaxed space-y-6">
+                  <div className="text-sm leading-relaxed space-y-6">
                     <p>Berdasarkan hasil pemrosesan data menggunakan LSTM, berikut adalah laporan analisis performa dan proyeksi penjualan:</p>
                     
-                    <div className="grid grid-cols-2 gap-8 my-4">
-                      <div className="border border-black/10 p-4 rounded-sm">
-                        <h5 className="text-[10px] font-bold uppercase mb-2 text-gray-400">Parameter</h5>
-                        <div className="text-[11px] space-y-1">
-                          <p className="flex justify-between"><span>Epochs</span> <b>{selectedReport.epochs}</b></p>
-                          <p className="flex justify-between"><span>Learning Rate</span> <b>{selectedReport.learning_rate}</b></p>
-                          <p className="flex justify-between"><span>Window Size</span> <b>{selectedReport.window_size} Mgg</b></p>
+                    <div className="flex flex-col sm:grid sm:grid-cols-2 gap-6 my-8">
+                      <div className="bg-slate-50/50 border-l-2 border-primary p-5 rounded-r-xl">
+                        <h5 className="text-[10px] font-bold uppercase mb-4 text-slate-400 tracking-widest">Konfigurasi Engine</h5>
+                        <div className="text-xs space-y-2">
+                          <p className="flex justify-between border-b border-slate-100 pb-1">
+                            <span className="text-slate-500">Epochs</span> 
+                            <span className="font-semibold text-slate-900">{selectedReport.epochs}</span>
+                          </p>
+                          <p className="flex justify-between border-b border-slate-100 pb-1">
+                            <span className="text-slate-500">Learning Rate</span> 
+                            <span className="font-semibold text-slate-900">{selectedReport.learning_rate}</span>
+                          </p>
+                          <p className="flex justify-between border-b border-slate-100 pb-1">
+                            <span className="text-slate-500">Window Size</span> 
+                            <span className="font-semibold text-slate-900">{selectedReport.window_size} Minggu</span>
+                          </p>
                         </div>
                       </div>
-                      <div className="border border-black/10 p-4 rounded-sm bg-gray-50/50">
-                        <h5 className="text-[10px] font-bold uppercase mb-2 text-gray-400">Akurasi</h5>
-                        <div className="grid grid-cols-2 gap-4 text-center">
-                          <div><p className="text-[9px] uppercase opacity-50">MAPE</p><p className="text-lg font-bold text-primary">{parseFloat(selectedReport.mape).toFixed(2)}%</p></div>
-                          <div><p className="text-[9px] uppercase opacity-50">RMSE</p><p className="text-lg font-bold">{parseFloat(selectedReport.rmse).toFixed(2)}</p></div>
+                      <div className="bg-primary/[0.02] border-l-2 border-accent p-5 rounded-r-xl">
+                        <h5 className="text-[10px] font-bold uppercase mb-4 text-slate-400 tracking-widest">Metrik Akurasi</h5>
+                        <div className="grid grid-cols-2 gap-4 text-center mt-2">
+                          <div className="bg-white p-3 rounded-lg border border-slate-100">
+                            <p className="text-[9px] uppercase font-bold text-primary opacity-50 mb-1">MAPE</p>
+                            <p className="text-xl font-bold text-primary">{parseFloat(selectedReport.mape).toFixed(2)}%</p>
+                          </div>
+                          <div className="bg-white p-3 rounded-lg border border-slate-100">
+                            <p className="text-[9px] uppercase font-bold text-slate-400 mb-1">RMSE</p>
+                            <p className="text-xl font-bold text-slate-900">{parseFloat(selectedReport.rmse).toFixed(2)}</p>
+                          </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="h-40 w-full my-4 border border-gray-100 p-2">
+                    <div className="h-64 w-full my-10 bg-white p-2 relative overflow-hidden">
+                      <div className="absolute top-0 left-0 flex items-center gap-4 z-10">
+                         <div className="flex items-center gap-1.5"><span className="w-2 h-0.5 bg-slate-200"></span> <span className="text-[9px] font-semibold text-slate-400 uppercase">Aktual</span></div>
+                         <div className="flex items-center gap-1.5"><span className="w-2 h-0.5 bg-primary"></span> <span className="text-[9px] font-semibold text-primary uppercase">Prediksi</span></div>
+                      </div>
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={results?.dates ? results.dates.map((d, i) => ({ 
+                        <AreaChart data={Array.isArray(results?.dates) ? results.dates.map((d, i) => ({ 
                           date: d, 
-                          Actual: results.actuals?.[i] || 0, 
-                          Prediction: results.predictions?.[i] || 0 
+                          Actual: (results.actuals && results.actuals[i]) || 0, 
+                          Prediction: (results.predictions && results.predictions[i]) || 0 
                         })) : []}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                          <defs>
+                            <linearGradient id="colorPred" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f8fafc" vertical={false} />
                           <XAxis dataKey="date" hide />
-                          <YAxis hide />
-                          <Line type="monotone" dataKey="Actual" stroke="#94a3b8" strokeWidth={1} dot={false} strokeDasharray="5 5" />
-                          <Line type="monotone" dataKey="Prediction" stroke="#1e293b" strokeWidth={2} dot={{ r: 2, fill: '#1e293b' }} />
-                        </LineChart>
+                          <YAxis stroke="#cbd5e1" fontSize={9} tickLine={false} axisLine={false} />
+                          <Area type="monotone" dataKey="Prediction" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorPred)" />
+                          <Line type="monotone" dataKey="Actual" stroke="#e2e8f0" strokeWidth={1.5} dot={false} strokeDasharray="4 4" />
+                        </AreaChart>
                       </ResponsiveContainer>
                     </div>
 
-                    <table className="w-full text-[10px] border-collapse border border-black">
-                      <thead>
-                        <tr className="bg-gray-100 uppercase">
-                          <th className="border border-black px-2 py-2">No</th>
-                          <th className="border border-black px-2 py-2">Periode</th>
-                          <th className="border border-black px-2 py-2 text-right">Aktual</th>
-                          <th className="border border-black px-2 py-2 text-right">Prediksi</th>
-                          <th className="border border-black px-2 py-2 text-right">Error</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(results?.dates || []).map((date, i) => (
-                          <tr key={i}>
-                            <td className="border border-black px-2 py-1 text-center">{i + 1}</td>
-                            <td className="border border-black px-2 py-1">{date}</td>
-                            <td className="border border-black px-2 py-1 text-right">{results.actuals?.[i]?.toLocaleString()}</td>
-                            <td className="border border-black px-2 py-1 text-right font-bold">{results.predictions?.[i]?.toLocaleString()}</td>
-                            <td className="border border-black px-2 py-1 text-right italic text-gray-400">{Math.abs((results.actuals?.[i] || 0) - (results.predictions?.[i] || 0)).toLocaleString()}</td>
+                    <div className="overflow-x-auto rounded-lg border border-slate-100">
+                      <table className="w-full text-[10px] border-collapse">
+                        <thead>
+                          <tr className="bg-slate-800 text-white uppercase tracking-wider">
+                            <th className="px-4 py-2 text-left font-bold">No</th>
+                            <th className="px-4 py-2 text-left font-bold">Periode</th>
+                            <th className="px-4 py-2 text-right font-bold">Aktual</th>
+                            <th className="px-4 py-2 text-right font-bold">Prediksi</th>
+                            <th className="px-4 py-2 text-right font-bold">Error</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {(Array.isArray(results?.dates) ? results.dates : []).map((date, i) => (
+                            <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}>
+                              <td className="px-4 py-1.5 text-slate-300 font-mono">{String(i + 1).padStart(2, '0')}</td>
+                              <td className="px-4 py-1.5 font-semibold text-slate-600">{date}</td>
+                              <td className="px-4 py-1.5 text-right text-slate-400">{(results.actuals?.[i] || 0).toLocaleString()}</td>
+                              <td className="px-4 py-1.5 text-right font-bold text-primary">{(results.predictions?.[i] || 0).toLocaleString()}</td>
+                              <td className="px-4 py-1.5 text-right text-slate-300 italic">
+                                {Math.abs((results.actuals?.[i] || 0) - (results.predictions?.[i] || 0)).toLocaleString()}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
 
                     {results?.forecast && (
-                      <div className="mt-6">
-                        <h5 className="text-[11px] font-bold uppercase mb-2 border-b border-black">Proyeksi Masa Depan</h5>
-                        <table className="w-full text-[11px] border-collapse border border-black">
-                          <thead>
-                            <tr className="bg-gray-50 uppercase">
-                              <th className="border border-black px-3 py-2">Minggu</th>
-                              <th className="border border-black px-3 py-2 text-right">Prediksi</th>
-                              <th className="border border-black px-3 py-2 text-center">Status Target</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {results.forecast.map((f, idx) => (
-                              <tr key={idx}>
-                                <td className="border border-black px-3 py-1 font-bold">Minggu +{f.weekOffset}</td>
-                                <td className="border border-black px-3 py-1 text-right font-bold">{(f.value || 0).toLocaleString()}</td>
-                                <td className="border border-black px-3 py-1 text-center text-[9px]">
-                                  {(f.value || 0) >= 1000 ? 'MEMENUHI' : 'DI BAWAH TARGET'}
-                                </td>
+                      <div className="mt-12 bg-slate-50/50 p-6 rounded-xl border border-slate-100">
+                        <h5 className="text-[10px] font-bold uppercase mb-4 text-slate-400 tracking-[0.2em] flex items-center gap-3">
+                          <div className="w-1.5 h-1.5 bg-accent rounded-full"></div>
+                          Proyeksi Penjualan Mendatang
+                        </h5>
+                        <div className="overflow-x-auto rounded-lg border border-slate-100 bg-white">
+                          <table className="w-full text-[10px] border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 text-slate-500 uppercase tracking-wider">
+                                <th className="px-6 py-2 text-left font-bold">Minggu Ke-</th>
+                                <th className="px-6 py-2 text-right font-bold">Estimasi</th>
+                                <th className="px-6 py-2 text-center font-bold">Status</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                              {results.forecast.map((f, idx) => (
+                                <tr key={idx}>
+                                  <td className="px-6 py-2.5 font-semibold text-slate-600">Minggu +{f.weekOffset}</td>
+                                  <td className="px-6 py-2.5 text-right font-bold text-accent">{(f.value || 0).toLocaleString()}</td>
+                                  <td className="px-6 py-2.5 text-center">
+                                    <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold uppercase ${
+                                      (f.value || 0) >= 1000 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'
+                                    }`}>
+                                      {(f.value || 0) >= 1000 ? 'Target' : 'Below'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     )}
                     
-                    <p className="pt-4 text-[11px]">Demikian laporan ini dibuat untuk dipergunakan sebagaimana mestinya.</p>
+                    <p className="pt-4 text-sm">Demikian laporan ini dibuat untuk dipergunakan sebagaimana mestinya.</p>
                   </div>
 
                   <div className="mt-16 flex justify-between px-10">
@@ -351,7 +409,7 @@ const Report = () => {
                     <div className="text-center">
                       <p className="text-[12px] mb-20">Jakarta, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
                       <div className="w-48 border-b border-black mx-auto"></div>
-                      <p className="text-[11px] font-bold mt-2 uppercase">Kepala Bidang Perencanaan</p>
+                      <p className="text-sm font-bold mt-2 uppercase">Kepala Bidang Perencanaan</p>
                     </div>
                   </div>
                 </div>
