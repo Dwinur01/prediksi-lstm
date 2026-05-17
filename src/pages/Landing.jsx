@@ -11,6 +11,7 @@ import {
   Database,
   FileText
 } from 'lucide-react';
+import Swal from 'sweetalert2';
 import mascot from '../assets/mascot.png';
 
 const Landing = () => {
@@ -26,6 +27,27 @@ const Landing = () => {
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     return () => observer.disconnect();
   }, []);
+
+  const handleDashboardClick = (e) => {
+    if (e) e.preventDefault();
+    if (!user) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Akses Ditolak',
+        text: 'Anda harus login terlebih dahulu untuk mengakses Dashboard!',
+        confirmButtonColor: '#3b82f6',
+        confirmButtonText: 'Ke Halaman Login',
+        background: isDarkMode ? '#1f2937' : '#ffffff',
+        color: isDarkMode ? '#ffffff' : '#111827'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          navigate('/login');
+        }
+      });
+    } else {
+      navigate('/dashboard');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background text-gray-900 dark:text-white overflow-hidden selection:bg-primary/30">
@@ -49,25 +71,22 @@ const Landing = () => {
           <div className="flex items-center gap-2 sm:gap-4">
             <Link 
               to="/login"
-              className="px-4 sm:px-8 py-2 sm:py-2.5 text-[10px] sm:text-xs font-black uppercase tracking-widest bg-gray-100 dark:bg-white/5 rounded-xl transition-all"
+              className="px-4 sm:px-6 py-2 sm:py-2.5 text-[10px] sm:text-xs font-black uppercase tracking-widest bg-gray-100 dark:bg-white/5 rounded-xl transition-all hover:bg-gray-200 dark:hover:bg-white/10"
             >
               Login
             </Link>
             <Link 
               to="/register"
-              className="px-4 sm:px-8 py-2 sm:py-2.5 text-[10px] sm:text-xs font-black uppercase tracking-widest bg-primary text-white rounded-xl shadow-lg shadow-primary/20 transition-all"
+              className="px-4 sm:px-6 py-2 sm:py-2.5 text-[10px] sm:text-xs font-black uppercase tracking-widest bg-gray-100 dark:bg-white/5 rounded-xl transition-all hover:bg-gray-200 dark:hover:bg-white/10"
             >
               Register
             </Link>
-            {user && (
-              <Link 
-                to="/dashboard"
-                className="ml-4 p-2.5 bg-gray-100 dark:bg-white/5 rounded-xl text-gray-500 hover:text-primary transition-colors"
-                title="Go to Dashboard"
-              >
-                <ArrowRight size={20} />
-              </Link>
-            )}
+            <button 
+              onClick={handleDashboardClick}
+              className="px-4 sm:px-6 py-2 sm:py-2.5 text-[10px] sm:text-xs font-black uppercase tracking-widest bg-primary text-white rounded-xl shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 flex items-center gap-2"
+            >
+              Dashboard
+            </button>
           </div>
         </div>
       </nav>
@@ -92,10 +111,10 @@ const Landing = () => {
             
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-5 mt-4">
               <button 
-                onClick={() => navigate(user ? '/dashboard' : '/login')}
+                onClick={handleDashboardClick}
                 className="btn-primary px-8 sm:px-12 py-3.5 sm:py-5 text-sm sm:text-xl group flex items-center justify-center gap-3"
               >
-                {user ? 'Ke Dashboard' : 'Masuk Ke Sistem'} 
+                Ke Dashboard
                 <ArrowRight size={20} className="group-hover:translate-x-2 transition-transform duration-500" />
               </button>
               

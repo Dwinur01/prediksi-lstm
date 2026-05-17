@@ -87,6 +87,7 @@ const LstmProcess = () => {
   // States for Prediction Result Table
   const [predRowsPerPage, setPredRowsPerPage] = useState(10);
   const [predCurrentPage, setPredCurrentPage] = useState(1);
+  const [warningFilterCount, setWarningFilterCount] = useState(10);
 
   useEffect(() => {
     fetchData();
@@ -147,9 +148,9 @@ const LstmProcess = () => {
       if (response.data.status === 'success') {
         const fetchedData = response.data.data;
         setData(fetchedData);
-        // Set initial sales target from max data
-        const maxVal = Math.max(...fetchedData.map(d => parseInt(d.tickets_sold) || 0));
-        setParams(p => ({ ...p, salesTarget: maxVal }));
+        // Set initial sales target from average data
+        const avgVal = Math.round(fetchedData.reduce((acc, d) => acc + (parseInt(d.tickets_sold) || 0), 0) / (fetchedData.length || 1));
+        setParams(p => ({ ...p, salesTarget: avgVal }));
       } else {
         throw new Error('Network error');
       }
@@ -157,8 +158,8 @@ const LstmProcess = () => {
       console.warn('Using dummy data for prediction input');
       const dummyData = getDummyTickets();
       setData(dummyData);
-      const maxVal = Math.max(...dummyData.map(d => parseInt(d.tickets_sold) || 0));
-      setParams(p => ({ ...p, salesTarget: maxVal }));
+      const avgVal = Math.round(dummyData.reduce((acc, d) => acc + (parseInt(d.tickets_sold) || 0), 0) / (dummyData.length || 1));
+      setParams(p => ({ ...p, salesTarget: avgVal }));
     }
   };
 
@@ -223,10 +224,10 @@ const LstmProcess = () => {
         
         try {
           const rawValues = data.map(d => parseInt(d.tickets_sold) || 0);
-          const maxDataValue = Math.max(...rawValues);
+          const avgDataValue = Math.round(rawValues.reduce((a, b) => a + b, 0) / (rawValues.length || 1));
           
-          // Update sales target automatically based on max data value
-          setParams(p => ({ ...p, salesTarget: maxDataValue }));
+          // Update sales target automatically based on avg data value
+          setParams(p => ({ ...p, salesTarget: avgDataValue }));
 
           const dates = data.map(d => `W${d.week || 0} ${d.year || ''}`);
 
@@ -706,13 +707,13 @@ const LstmProcess = () => {
                     <div>
                       <label className="block text-gray-700 dark:text-gray-300 font-extrabold uppercase tracking-widest text-xs mb-2">Sales Target</label>
                       <div className="p-3.5 bg-gray-100 dark:bg-black/40 rounded-2xl border border-gray-200 dark:border-white/5 text-primary text-sm font-black flex items-center h-[50px]">
-                        {params.salesTarget?.toLocaleString()} <span className="text-[10px] text-gray-500 font-normal italic ml-2 mt-0.5">(Auto-Sync Max Data)</span>
+                        {params.salesTarget?.toLocaleString()} <span className="text-[10px] text-gray-500 font-normal italic ml-2 mt-0.5">(Auto-Sync Rata-Rata)</span>
                       </div>
                     </div>
                   </div>
                   <div className="lg:col-span-1 text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-black/30 p-4 rounded-2xl border border-gray-200 dark:border-white/5 flex flex-col justify-center">
                     <p><strong className="text-gray-900 dark:text-white">Forecast:</strong> Jarak jangkauan minggu masa depan yang ingin ditebak model.</p>
-                    <p className="mt-2"><strong className="text-gray-900 dark:text-white">Sales Target:</strong> Garis batas aman penjualan (diambil dari nilai rekor dataset Anda).</p>
+                    <p className="mt-2"><strong className="text-gray-900 dark:text-white">Sales Target:</strong> Garis batas aman penjualan (diambil dari nilai rata-rata histori data Anda).</p>
                   </div>
                 </div>
 
@@ -870,24 +871,102 @@ const LstmProcess = () => {
                 </div>
               )}
 
-              {/* Feature 5: Threshold Alert Banner */}
+              {/* Feature 5: Threshold Alert Banner & Table */}
               {(() => {
                 const totalPreds = results.predictions.length;
                 const checkCount = Math.max(1, Math.ceil(totalPreds * 0.2)); // 20% terakhir
-                const last20Pct = results.predictions.slice(-checkCount);
                 
-                // Cek apakah di 20% terakhir ada yang di bawah target
+                // Cek apakah di 20% terakhir ada yang di bawah target (Trigger Peringatan)
+                const last20Pct = results.predictions.slice(-checkCount);
                 const isBelowTarget = last20Pct.some(val => val < params.salesTarget);
                 
                 if (!isBelowTarget) return null;
+                
+                // Berapa data yang akan ditampilkan di tabel berdasarkan state filter
+                const displayCount = warningFilterCount === 'all' ? totalPreds : Math.min(totalPreds, warningFilterCount);
+                
+                const recentData = [];
+                for (let i = totalPreds - displayCount; i < totalPreds; i++) {
+                   recentData.push({
+                     no: i + 1,
+                     week: results.dates ? results.dates[i] : `Minggu ${i+1}`,
+                     prediction: results.predictions[i],
+                     target: params.salesTarget,
+                     isBelow: results.predictions[i] < params.salesTarget,
+                     diff: results.predictions[i] - params.salesTarget
+                   });
+                }
+                
                 return (
-                  <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-5 flex items-start gap-4">
-                    <TrendingUp className="text-red-500 mt-1 flex-shrink-0 rotate-180" size={24} />
-                    <div>
-                      <h4 className="text-red-500 font-bold text-sm uppercase tracking-wider">Peringatan: Tren Penjualan Menurun</h4>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Sistem mendeteksi bahwa pada <strong>{checkCount} minggu terakhir</strong> (20% data terbaru), angka prediksi jatuh di bawah target batas minimum sebesar <strong>{params.salesTarget.toLocaleString()}</strong> tiket.
-                      </p>
+                  <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-6 overflow-hidden shadow-sm">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-red-500/10 rounded-lg">
+                          <TrendingUp className="text-red-500 flex-shrink-0 rotate-180" size={24} />
+                        </div>
+                        <div>
+                          <h4 className="text-red-500 font-black text-sm uppercase tracking-widest">Peringatan: Tren Penjualan Menurun</h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Sistem mendeteksi bahwa pada <strong>{checkCount} minggu terakhir</strong> (20% data terbaru), terdapat prediksi di bawah target minimum.
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Filter Dropdown */}
+                      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-red-700 dark:text-red-400 bg-red-500/10 px-3 py-2 rounded-lg border border-red-500/20">
+                        <span>Tampilkan: </span>
+                        <select 
+                          value={warningFilterCount}
+                          onChange={(e) => setWarningFilterCount(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+                          className="bg-transparent border-none outline-none font-black cursor-pointer"
+                        >
+                          <option className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white" value={5}>5 Data</option>
+                          <option className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white" value={10}>10 Data</option>
+                          <option className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white" value={20}>20 Data</option>
+                          <option className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white" value="all">Semua Data</option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    <div className="overflow-x-auto overflow-y-auto max-h-[350px] custom-scrollbar rounded-xl border border-red-500/20 bg-white/50 dark:bg-black/20 relative">
+                      <table className="w-full text-left text-xs sm:text-sm text-gray-700 dark:text-gray-300">
+                        <thead className="bg-red-50 dark:bg-gray-900 text-red-700 dark:text-red-400 font-bold uppercase tracking-wider text-[10px] sm:text-xs sticky top-0 z-10 shadow-sm">
+                          <tr>
+                            <th className="px-4 py-3 border-b border-red-500/20 text-center">No</th>
+                            <th className="px-4 py-3 border-b border-red-500/20">Periode</th>
+                            <th className="px-4 py-3 border-b border-red-500/20 text-right">Prediksi Penjualan</th>
+                            <th className="px-4 py-3 border-b border-red-500/20 text-right">Target Minimum</th>
+                            <th className="px-4 py-3 border-b border-red-500/20 text-right">Selisih</th>
+                            <th className="px-4 py-3 border-b border-red-500/20 text-center">Keterangan</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {recentData.map((item, idx) => (
+                            <tr key={idx} className={`border-b border-red-500/10 hover:bg-red-500/5 transition-colors ${item.isBelow ? 'bg-red-500/5' : ''}`}>
+                              <td className="px-4 py-3 text-center">{item.no}</td>
+                              <td className="px-4 py-3 font-medium">{item.week}</td>
+                              <td className={`px-4 py-3 text-right font-bold ${item.isBelow ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
+                                {Math.round(item.prediction).toLocaleString()}
+                              </td>
+                              <td className="px-4 py-3 text-right text-gray-500">{item.target.toLocaleString()}</td>
+                              <td className={`px-4 py-3 text-right font-mono ${item.diff < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                                {item.diff > 0 ? '+' : ''}{Math.round(item.diff).toLocaleString()}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                {item.isBelow ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 text-[10px] font-bold uppercase tracking-wider">
+                                    <AlertCircle size={10} /> Di Bawah Target
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold uppercase tracking-wider">
+                                    <CheckCircle size={10} /> Aman
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 );
