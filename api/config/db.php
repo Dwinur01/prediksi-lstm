@@ -102,15 +102,7 @@ function init_sqlite_db($conn) {
         FOREIGN KEY (history_id) REFERENCES prediction_history(id) ON DELETE CASCADE
     )");
     
-    // 5. Seed default users
-    $admin_pw = password_hash('admin', PASSWORD_DEFAULT);
-    $demo_pw = password_hash('password123', PASSWORD_DEFAULT);
-    
-    $stmt = $conn->prepare("INSERT INTO users (name, username, password) VALUES (:name, :username, :password)");
-    $stmt->execute([':name' => 'admin', ':username' => 'admin123', ':password' => $admin_pw]);
-    $stmt->execute([':name' => 'Demo Account', ':username' => 'demo@swabina.co.id', ':password' => $demo_pw]);
-    
-    // 6. Seed excel data if exists
+    // 5. Seed excel data if exists
     $data_file = __DIR__ . '/excel_data.json';
     if (file_exists($data_file)) {
         $json_data = json_decode(file_get_contents($data_file), true);

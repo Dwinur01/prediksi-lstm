@@ -1,41 +1,103 @@
 <?php
-require_once '../config/db.php';
+/**
+ * Endpoint Pendaftaran Pengguna Baru (T-02)
+ * POST /auth/register
+ * Hanya dapat diakses oleh administrator (TC-AUTH-06, OQ-05)
+ */
 
-$data = json_decode(file_get_contents("php://input"));
+require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../config/auth.php';
 
-if (!empty($data->name) && !empty($data->username) && !empty($data->password)) {
-    $name = htmlspecialchars(strip_tags($data->name));
-    $username = htmlspecialchars(strip_tags($data->username));
-    $password = password_hash($data->password, PASSWORD_DEFAULT);
+header('Content-Type: application/json; charset=utf-8');
 
-    // Check if username exists
-    $check_query = "SELECT id FROM users WHERE username = :username LIMIT 1";
-    $check_stmt = $conn->prepare($check_query);
-    $check_stmt->bindParam(":username", $username);
-    $check_stmt->execute();
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(["status" => "error", "message" => "Method not allowed."], JSON_UNESCAPED_UNICODE);
+    exit();
+}
 
-    if ($check_stmt->rowCount() > 0) {
-        http_response_code(400);
-        echo json_encode(["status" => "error", "message" => "Username already exists."]);
-        exit();
-    }
+// Hanya role admin yang boleh mendaftarkan pengguna baru
+$currentUser = require_role('admin');
 
-    $query = "INSERT INTO users (name, username, password) VALUES (:name, :username, :password)";
-    $stmt = $conn->prepare($query);
-
-    $stmt->bindParam(":name", $name);
-    $stmt->bindParam(":username", $username);
-    $stmt->bindParam(":password", $password);
-
-    if ($stmt->execute()) {
-        http_response_code(201);
-        echo json_encode(["status" => "success", "message" => "User registered successfully."]);
-    } else {
-        http_response_code(503);
-        echo json_encode(["status" => "error", "message" => "Unable to register user."]);
-    }
-} else {
+$data = json_decode(file_get_contents("php://input"), true);
+if (!is_array($data)) {
     http_response_code(400);
-    echo json_encode(["status" => "error", "message" => "Incomplete data."]);
+    echo json_encode(["status" => "error", "message" => "Format JSON tidak valid."], JSON_UNESCAPED_UNICODE);
+    exit();
+}
+
+$name = trim($data['name'] ?? '');
+$username = trim($data['username'] ?? '');
+$password = $data['password'] ?? '';
+$role = strtolower(trim($data['role'] ?? 'staf'));
+if ($role !== 'admin' && $role !== 'staf') {
+    $role = 'staf';
+}
+
+$errors = [];
+if ($name === '') {
+    $errors['name'] = 'Nama wajib diisi.';
+}
+if ($username === '') {
+    $errors['username'] = 'Username wajib diisi.';
+} elseif (preg_match('/\s/', $username)) {
+    $errors['username'] = 'Username tidak boleh mengandung spasi.';
+} elseif (strlen($username) < 3 || strlen($username) > 50) {
+    $errors['username'] = 'Username harus 3-50 karakter.';
+}
+
+if ($password === '') {
+    $errors['password'] = 'Password wajib diisi.';
+} elseif (strlen($password) < 8) {
+    $errors['password'] = 'Password minimal 8 karakter.';
+}
+
+if (!empty($errors)) {
+    http_response_code(422);
+    echo json_encode([
+        "status" => "error",
+        "message" => "Validasi data gagal.",
+        "errors" => $errors
+    ], JSON_UNESCAPED_UNICODE);
+    exit();
+}
+
+// Periksa apakah username sudah terdaftar
+$checkStmt = $conn->prepare("SELECT id FROM users WHERE username = :username LIMIT 1");
+$checkStmt->execute([':username' => $username]);
+if ($checkStmt->fetch()) {
+    http_response_code(422);
+    echo json_encode([
+        "status" => "error",
+        "message" => "Username sudah digunakan.",
+        "errors" => ["username" => "Username sudah digunakan."]
+    ], JSON_UNESCAPED_UNICODE);
+    exit();
+}
+
+$password_hash = password_hash($password, PASSWORD_DEFAULT);
+
+$stmt = $conn->prepare("INSERT INTO users (name, username, password, role) VALUES (:name, :username, :password, :role)");
+$stmt->bindParam(":name", $name);
+$stmt->bindParam(":username", $username);
+$stmt->bindParam(":password", $password_hash);
+$stmt->bindParam(":role", $role);
+
+if ($stmt->execute()) {
+    $newId = (int)$conn->lastInsertId();
+    http_response_code(201);
+    echo json_encode([
+        "status" => "success",
+        "message" => "Pengguna berhasil didaftarkan.",
+        "user" => [
+            "id" => $newId,
+            "name" => $name,
+            "username" => $username,
+            "role" => $role
+        ]
+    ], JSON_UNESCAPED_UNICODE);
+} else {
+    http_response_code(500);
+    echo json_encode(["status" => "error", "message" => "Gagal mendaftarkan pengguna."], JSON_UNESCAPED_UNICODE);
 }
 ?>
