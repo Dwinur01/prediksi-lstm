@@ -1,19 +1,51 @@
 <?php
-header("Access-Control-Allow-Origin: *");
+/**
+ * Konfigurasi Koneksi Database dan Header Keamanan (T-03)
+ */
+
+require_once __DIR__ . '/env.php';
+
+// Validasi keberadaan konfigurasi lingkungan (.env)
+if (!has_env_file() && !getenv('DB_NAME') && !getenv('DB_HOST')) {
+    http_response_code(500);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Konfigurasi server (.env) belum diatur.'
+    ], JSON_UNESCAPED_UNICODE);
+    exit();
+}
+
+// CORS Whitelist Dinamis (TC-SEC-05)
+$allowedOriginsStr = env('ALLOWED_ORIGINS', '');
+$allowedOrigins = array_filter(array_map('trim', explode(',', $allowedOriginsStr)));
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+
+header("Vary: Origin");
+if ($origin !== '' && in_array($origin, $allowedOrigins, true)) {
+    header("Access-Control-Allow-Origin: {$origin}");
+}
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
 
-if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+// Header Keamanan Dasar (TC-SEC-06)
+header("X-Content-Type-Options: nosniff");
+header("Cache-Control: no-store");
+
+if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
-$host = 'localhost';
-$db_name = 'prediksi_lstm';
-$username = 'root';
-$password = '';
+// Konfigurasi Database dari .env
+$host = env('DB_HOST', 'localhost');
+$port = env('DB_PORT', '3306');
+$db_name = env('DB_NAME', 'prediksi_lstm');
+$username = env('DB_USER', '');
+$password = env('DB_PASS', '');
+$fallback = strtolower(trim((string)env('DB_FALLBACK', '0')));
 
-global $db_type;
+global $db_type, $conn;
 $db_type = 'mysql';
 
 function init_sqlite_db($conn) {
@@ -96,29 +128,39 @@ function init_sqlite_db($conn) {
 }
 
 try {
-    // Try MySQL first
-    $conn = new PDO("mysql:host=$host;dbname=$db_name;charset=utf8", $username, $password);
+    // Mencoba koneksi MySQL terlebih dahulu
+    $dsn = "mysql:host={$host};port={$port};dbname={$db_name};charset=utf8mb4";
+    $conn = new PDO($dsn, $username, $password);
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $db_type = 'mysql';
-} catch(PDOException $exception) {
-    // Fallback to SQLite
-    $sqlite_file = __DIR__ . '/prediksi_lstm.sqlite';
-    try {
-        $conn = new PDO("sqlite:" . $sqlite_file);
-        $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        $db_type = 'sqlite';
-        
-        // Enable foreign keys
-        $conn->exec("PRAGMA foreign_keys = ON;");
-        
-        // Initialize tables and seed
-        init_sqlite_db($conn);
-    } catch(PDOException $sqlite_ex) {
+} catch (PDOException $exception) {
+    // Fallback ke SQLite HANYA jika secara eksplisit disetel di DB_FALLBACK=sqlite
+    if ($fallback === 'sqlite') {
+        $sqlite_file = __DIR__ . '/prediksi_lstm.sqlite';
+        try {
+            $conn = new PDO("sqlite:" . $sqlite_file);
+            $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $db_type = 'sqlite';
+            $conn->exec("PRAGMA foreign_keys = ON;");
+            init_sqlite_db($conn);
+        } catch (PDOException $sqlite_ex) {
+            error_log("Database connection error (SQLite): " . $sqlite_ex->getMessage());
+            http_response_code(500);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                "status" => "error",
+                "message" => "Gagal terhubung ke database."
+            ], JSON_UNESCAPED_UNICODE);
+            exit();
+        }
+    } else {
+        error_log("Database connection error (MySQL): " . $exception->getMessage());
         http_response_code(500);
+        header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
-            "status" => "error", 
-            "message" => "Database connection error (MySQL and SQLite fallback failed): " . $sqlite_ex->getMessage()
-        ]);
+            "status" => "error",
+            "message" => "Gagal terhubung ke database server."
+        ], JSON_UNESCAPED_UNICODE);
         exit();
     }
 }
