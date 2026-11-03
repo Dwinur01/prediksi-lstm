@@ -62,19 +62,23 @@ function init_sqlite_db($conn) {
         name TEXT NOT NULL,
         username TEXT NOT NULL UNIQUE,
         password TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'staf',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )");
     
     // 2. Create ticket_sales table
     $conn->exec("CREATE TABLE ticket_sales (
         id TEXT PRIMARY KEY,
+        week_start_date TEXT NOT NULL,
         sale_date TEXT NULL,
         week INTEGER NOT NULL,
         year INTEGER NOT NULL,
         tickets_sold INTEGER NOT NULL,
         ticket_price REAL DEFAULT 0,
+        libur INTEGER NOT NULL DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE (week, year)
+        UNIQUE (week_start_date)
     )");
     
     // 3. Create prediction_history table
@@ -111,16 +115,19 @@ function init_sqlite_db($conn) {
     if (file_exists($data_file)) {
         $json_data = json_decode(file_get_contents($data_file), true);
         if (is_array($json_data)) {
-            $insert_sales = $conn->prepare("INSERT OR IGNORE INTO ticket_sales (id, sale_date, week, year, tickets_sold, ticket_price) VALUES (:id, :sale_date, :week, :year, :tickets_sold, :ticket_price)");
+            $insert_sales = $conn->prepare("INSERT OR IGNORE INTO ticket_sales (id, week_start_date, sale_date, week, year, tickets_sold, ticket_price, libur) VALUES (:id, :week_start_date, :sale_date, :week, :year, :tickets_sold, :ticket_price, :libur)");
             foreach ($json_data as $row) {
                 $id = 'TS_' . $row['year'] . '_' . str_pad($row['week'], 2, '0', STR_PAD_LEFT);
+                $wDate = $row['sale_date'] ?? $row['week_start_date'] ?? null;
                 $insert_sales->execute([
                     ':id' => $id,
-                    ':sale_date' => $row['sale_date'],
+                    ':week_start_date' => $wDate,
+                    ':sale_date' => $wDate,
                     ':week' => $row['week'],
                     ':year' => $row['year'],
                     ':tickets_sold' => $row['tickets_sold'],
-                    ':ticket_price' => $row['ticket_price']
+                    ':ticket_price' => $row['ticket_price'],
+                    ':libur' => $row['libur'] ?? 0
                 ]);
             }
         }
