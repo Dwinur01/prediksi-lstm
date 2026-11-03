@@ -1,5 +1,9 @@
 <?php
 require_once '../config/db.php';
+require_once '../config/auth.php';
+
+header('Content-Type: application/json; charset=utf-8');
+$currentUser = require_auth();
 
 $method = $_SERVER['REQUEST_METHOD'];
 

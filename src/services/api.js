@@ -6,7 +6,7 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// TODO(Antigravity, T-01): server menerbitkan & memverifikasi token; klien sudah mengirim header Authorization.
+// T-01: Header Authorization Bearer dikirim otomatis; respons 401 membersihkan token dan mengarahkan ke /login.
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
