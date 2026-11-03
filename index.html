@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1120" />
+    <title>SWA Predict — Prediksi Penjualan Tiket</title>
+    <!-- Terapkan tema SEBELUM render agar tidak ada kilatan tema salah.
+         DEFAULT_THEME harus sama dengan src/context/ThemeContext.jsx -->
+    <script>
+      (function () {
+        var DEFAULT_THEME = 'dark';
+        var t = DEFAULT_THEME;
+        try {
+          var s = localStorage.getItem('theme');
+          if (s === 'light' || s === 'dark') t = s;
+        } catch (e) {}
+        document.documentElement.classList.toggle('dark', t === 'dark');
+        document.documentElement.style.colorScheme = t;
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

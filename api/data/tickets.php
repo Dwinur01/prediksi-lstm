@@ -1,0 +1,175 @@
+<?php
+require_once '../config/db.php';
+
+$method = $_SERVER['REQUEST_METHOD'];
+
+// Handle GET: Fetch all tickets ordered by year and week
+if ($method == 'GET') {
+    $query = "SELECT * FROM ticket_sales ORDER BY sale_date ASC, week ASC";
+    $stmt = $conn->prepare($query);
+    $stmt->execute();
+    
+    $tickets = [];
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $tickets[] = $row;
+    }
+    
+    echo json_encode(["status" => "success", "data" => $tickets]);
+}
+
+// Handle POST: Add new ticket or batch insert
+else if ($method == 'POST') {
+    $data = json_decode(file_get_contents("php://input"), true);
+    $today = date('Ymd');
+    $prefix = "tiket-$today-";
+
+    function generateNextId($conn, $prefix) {
+        $stmt = $conn->prepare("SELECT id FROM ticket_sales WHERE id LIKE :prefix ORDER BY id DESC LIMIT 1");
+        $prefixLike = $prefix . '%';
+        $stmt->bindParam(':prefix', $prefixLike);
+        $stmt->execute();
+        $lastId = $stmt->fetchColumn();
+        
+        if ($lastId) {
+            $parts = explode('-', $lastId);
+            $lastNum = (int)end($parts);
+            $newNum = $lastNum + 1;
+        } else {
+            $newNum = 1;
+        }
+        return $prefix . str_pad($newNum, 3, '0', STR_PAD_LEFT);
+    }
+    
+    // Check if batch delete
+    if (isset($data['delete_batch']) && is_array($data['delete_batch'])) {
+        try {
+            $placeholders = str_repeat('?,', count($data['delete_batch']) - 1) . '?';
+            $query = "DELETE FROM ticket_sales WHERE id IN ($placeholders)";
+            $stmt = $conn->prepare($query);
+            $stmt->execute($data['delete_batch']);
+            echo json_encode(["status" => "success", "message" => count($data['delete_batch']) . " records deleted."]);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(["status" => "error", "message" => "Delete failed: " . $e->getMessage()]);
+        }
+    }
+    // Check if batch insert (array of objects)
+    else if (isset($data['batch']) && is_array($data['batch'])) {
+        $successCount = 0;
+        
+        $conn->beginTransaction();
+        try {
+            global $db_type;
+            if ($db_type === 'sqlite') {
+                $query = "INSERT INTO ticket_sales (id, sale_date, week, year, tickets_sold, ticket_price) VALUES (:id, :sdate, :week, :year, :tickets_sold, :ticket_price)
+                          ON CONFLICT(week, year) DO UPDATE SET tickets_sold = excluded.tickets_sold, sale_date = excluded.sale_date, ticket_price = excluded.ticket_price";
+            } else {
+                $query = "INSERT INTO ticket_sales (id, sale_date, week, year, tickets_sold, ticket_price) VALUES (:id, :sdate, :week, :year, :tickets_sold, :ticket_price)
+                          ON DUPLICATE KEY UPDATE tickets_sold = :tickets_sold, sale_date = :sdate, ticket_price = :ticket_price";
+            }
+            $stmt = $conn->prepare($query);
+            
+            // Get starting number for batch
+            $stmtLast = $conn->prepare("SELECT id FROM ticket_sales WHERE id LIKE :prefix ORDER BY id DESC LIMIT 1");
+            $prefixLike = $prefix . '%';
+            $stmtLast->bindParam(':prefix', $prefixLike);
+            $stmtLast->execute();
+            $lastId = $stmtLast->fetchColumn();
+            $nextNum = 1;
+            if ($lastId) {
+                $parts = explode('-', $lastId);
+                $nextNum = (int)end($parts) + 1;
+            }
+            foreach ($data['batch'] as $item) {
+                if (isset($item['week']) && isset($item['year']) && isset($item['tickets_sold'])) {
+                    $generatedId = $prefix . str_pad($nextNum++, 3, '0', STR_PAD_LEFT);
+                    $sale_date = isset($item['sale_date']) ? $item['sale_date'] : null;
+                    $ticket_price = isset($item['ticket_price']) ? $item['ticket_price'] : 0;
+                    $stmt->bindParam(':id', $generatedId);
+                    $stmt->bindParam(':sdate', $sale_date);
+                    $stmt->bindParam(':week', $item['week']);
+                    $stmt->bindParam(':year', $item['year']);
+                    $stmt->bindParam(':tickets_sold', $item['tickets_sold']);
+                    $stmt->bindParam(':ticket_price', $ticket_price);
+                    $stmt->execute();
+                    $successCount++;
+                }
+            }
+            $conn->commit();
+            echo json_encode(["status" => "success", "message" => "$successCount records imported successfully."]);
+        } catch (Exception $e) {
+            $conn->rollBack();
+            http_response_code(500);
+            echo json_encode(["status" => "error", "message" => "Import failed: " . $e->getMessage()]);
+        }
+    } else {
+        // Single insert or Update
+        if (isset($data['week']) && isset($data['year']) && isset($data['tickets_sold'])) {
+            // If ID is provided, use it (Update), otherwise generate new (Insert)
+            $id = (isset($data['id']) && !empty($data['id'])) ? $data['id'] : generateNextId($conn, $prefix);
+            $sale_date = isset($data['sale_date']) ? $data['sale_date'] : null;
+            
+            global $db_type;
+            if ($db_type === 'sqlite') {
+                $query = "INSERT INTO ticket_sales (id, sale_date, week, year, tickets_sold, ticket_price) VALUES (:id, :sdate, :week, :year, :tickets_sold, :ticket_price)
+                          ON CONFLICT(week, year) DO UPDATE SET tickets_sold = excluded.tickets_sold, sale_date = excluded.sale_date, week = excluded.week, year = excluded.year, ticket_price = excluded.ticket_price";
+            } else {
+                $query = "INSERT INTO ticket_sales (id, sale_date, week, year, tickets_sold, ticket_price) VALUES (:id, :sdate, :week, :year, :tickets_sold, :ticket_price)
+                          ON DUPLICATE KEY UPDATE tickets_sold = :tickets_sold, sale_date = :sdate, week = :week, year = :year, ticket_price = :ticket_price";
+            }
+            $stmt = $conn->prepare($query);
+            
+            $ticket_price = isset($data['ticket_price']) ? $data['ticket_price'] : 0;
+            $stmt->bindParam(':id', $id);
+            $stmt->bindParam(':sdate', $sale_date);
+            $stmt->bindParam(':week', $data['week']);
+            $stmt->bindParam(':year', $data['year']);
+            $stmt->bindParam(':tickets_sold', $data['tickets_sold']);
+            $stmt->bindParam(':ticket_price', $ticket_price);
+            
+            if ($stmt->execute()) {
+                $msg = (isset($data['id']) && !empty($data['id'])) ? "Record updated" : "Record saved with ID: $id";
+                echo json_encode(["status" => "success", "message" => $msg]);
+            } else {
+                http_response_code(500);
+                echo json_encode(["status" => "error", "message" => "Failed to process record."]);
+            }
+        } else {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "message" => "Incomplete data."]);
+        }
+    }
+}
+
+// Handle DELETE: Delete a ticket by ID
+else if ($method == 'DELETE') {
+    $id = isset($_GET['id']) ? $_GET['id'] : null;
+    
+    if ($id) {
+        $query = "DELETE FROM ticket_sales WHERE id = :id";
+        $stmt = $conn->prepare($query);
+        $stmt->bindParam(':id', $id);
+        
+        if ($stmt->execute()) {
+            echo json_encode(["status" => "success", "message" => "Record deleted successfully."]);
+        } else {
+            http_response_code(500);
+            echo json_encode(["status" => "error", "message" => "Failed to delete record."]);
+        }
+    } else {
+        // Truncate table if no id is provided and 'all' flag is set (for reset purposes)
+        if(isset($_GET['all']) && $_GET['all'] == 'true') {
+            $query = "TRUNCATE TABLE ticket_sales";
+            $stmt = $conn->prepare($query);
+            $stmt->execute();
+            echo json_encode(["status" => "success", "message" => "All records deleted successfully."]);
+        } else {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "message" => "ID is required."]);
+        }
+    }
+} else {
+    http_response_code(405);
+    echo json_encode(["status" => "error", "message" => "Method not allowed."]);
+}
+?>
