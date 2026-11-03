@@ -134,3 +134,4 @@ function require_role($requiredRole) {
     }
     return $user;
 }
+

@@ -47,6 +47,15 @@ CREATE TABLE IF NOT EXISTS lstm_weights (
     FOREIGN KEY (history_id) REFERENCES prediction_history(id) ON DELETE CASCADE
 );
 
+-- 5. Tabel Percobaan Login (Rate Limiting)
+CREATE TABLE IF NOT EXISTS login_attempts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    ip_address VARCHAR(45) NOT NULL,
+    username VARCHAR(50) NOT NULL,
+    attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_ip_user_time (ip_address, username, attempted_at)
+);
+
 -- Indexes for performance
 CREATE INDEX idx_year_week ON ticket_sales(year, week);
 CREATE INDEX idx_week_start_date ON ticket_sales(week_start_date);

@@ -87,3 +87,4 @@ function has_env_file() {
     }
     return false;
 }
+
