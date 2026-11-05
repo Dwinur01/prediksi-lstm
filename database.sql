@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS ticket_sales (
 -- 3. Tabel Riwayat Prediksi
 CREATE TABLE IF NOT EXISTS prediction_history (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NULL,
     run_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     epochs INT,
     learning_rate FLOAT,

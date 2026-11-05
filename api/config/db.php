@@ -84,6 +84,7 @@ function init_sqlite_db($conn) {
     // 3. Create prediction_history table
     $conn->exec("CREATE TABLE prediction_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NULL,
         run_date DATETIME DEFAULT CURRENT_TIMESTAMP,
         epochs INTEGER,
         learning_rate REAL,

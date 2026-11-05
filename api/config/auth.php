@@ -104,6 +104,10 @@ function verify_token($jwt = null) {
         return false;
     }
 
+    if (isset($payload['sub']) && !isset($payload['id'])) {
+        $payload['id'] = $payload['sub'];
+    }
+
     return $payload;
 }
 

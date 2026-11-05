@@ -310,17 +310,22 @@ else if ($method === 'DELETE') {
             echo json_encode(["status" => "error", "message" => "Failed to delete record."]);
         }
     } else {
-        // Reset massal jika ?all=true
+        // Reset massal jika ?all=true (T-05: Khusus Admin & Transaksional tanpa TRUNCATE)
         if (isset($_GET['all']) && $_GET['all'] === 'true') {
-            global $db_type;
-            if ($db_type === 'sqlite') {
-                $query = "DELETE FROM ticket_sales";
-            } else {
-                $query = "TRUNCATE TABLE ticket_sales";
+            require_role('admin');
+            try {
+                $conn->beginTransaction();
+                $stmt = $conn->prepare("DELETE FROM ticket_sales");
+                $stmt->execute();
+                $conn->commit();
+                echo json_encode(["status" => "success", "message" => "All records deleted successfully."]);
+            } catch (Exception $e) {
+                if ($conn->inTransaction()) {
+                    $conn->rollBack();
+                }
+                http_response_code(500);
+                echo json_encode(["status" => "error", "message" => "Failed to delete all records: " . $e->getMessage()]);
             }
-            $stmt = $conn->prepare($query);
-            $stmt->execute();
-            echo json_encode(["status" => "success", "message" => "All records deleted successfully."]);
         } else {
             http_response_code(400);
             echo json_encode(["status" => "error", "message" => "ID is required."]);
