@@ -52,7 +52,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <App />
       <Toaster position="top-right" toastOptions={{
         duration: 3500,
-        style: { background: 'rgb(var(--surface))', color: 'rgb(var(--ink))', border: '1px solid rgb(var(--rule))', borderRadius: '6px', boxShadow: 'none', fontSize: '14px' },
+        style: { background: 'rgb(var(--surface))', color: 'rgb(var(--ink))', border: '1px solid rgb(var(--rule))', borderRadius: '14px', boxShadow: '0 8px 24px rgb(0 0 0 / 0.10)', fontSize: '14px', padding: '12px 16px' },
         success: { iconTheme: { primary: 'rgb(var(--positive))', secondary: 'rgb(var(--surface))' } },
         error: { iconTheme: { primary: 'rgb(var(--negative))', secondary: 'rgb(var(--surface))' } },
       }} />

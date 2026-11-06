@@ -106,6 +106,7 @@ const Report = () => {
       {/* ── Header ── */}
       <motion.div variants={itemV} className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
+          <p className="eyebrow mb-1">Riwayat Prediksi</p>
           <h1 className="text-3xl font-semibold tracking-tight text-ink mb-1">Manajemen Laporan</h1>
           <p className="text-muted text-sm font-medium">Preview dan cetak laporan prediksi LSTM resmi PT. Swabina Gatra.</p>
         </div>
@@ -180,7 +181,11 @@ const Report = () => {
           </div>
           <div className="flex-1 overflow-y-auto space-y-2 pr-1">
             {filteredHistory.length === 0 ? (
-              <p className="text-sm text-muted text-center py-8">Belum ada riwayat.</p>
+              <div className="text-center py-10">
+                <FileText size={36} className="mx-auto mb-3 text-rule" />
+                <p className="text-sm font-semibold text-muted">Belum ada laporan</p>
+                <p className="text-xs text-muted mt-1">Jalankan prediksi untuk membuat laporan pertama</p>
+              </div>
             ) : filteredHistory.map((h, i) => {
               const isActive = selectedReport?.id === h.id;
               const mape = parseFloat(h.mape || 0);

@@ -77,6 +77,7 @@ const Profile = ({ user, setUser }) => {
 
       {/* ── Header ── */}
       <motion.div variants={itemV}>
+        <p className="eyebrow mb-1">Pengaturan Akun</p>
         <h1 className="text-3xl font-semibold tracking-tight text-ink mb-1">Pengaturan Profil</h1>
         <p className="text-muted text-sm font-medium">Perbarui informasi akun dan kata sandi Anda.</p>
       </motion.div>

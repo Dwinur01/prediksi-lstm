@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Menu, X, Sun, Moon, LayoutDashboard, Database, BrainCircuit, FileText, User, LogOut } from 'lucide-react';
 import { useTheme } from '../../context/theme';
 
@@ -53,16 +54,21 @@ const Layout = ({ user, setUser }) => {
   const { isDark, toggleTheme } = useTheme();
   const [open, setOpen] = useState(false);
 
+  const currentPage = navItems.find((n) =>
+    n.end ? location.pathname === n.path : location.pathname.startsWith(n.path)
+  );
+
+  // #9 — Dynamic page title
+  useEffect(() => {
+    document.title = `${currentPage?.name ?? 'Beranda'} · SWA Predict`;
+  }, [location.pathname, currentPage]);
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
     navigate('/login');
   };
-
-  const currentPage = navItems.find((n) =>
-    n.end ? location.pathname === n.path : location.pathname.startsWith(n.path)
-  );
 
   const ThemeButton = (
     <button
@@ -77,10 +83,23 @@ const Layout = ({ user, setUser }) => {
 
   const initials = user?.name?.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || 'U';
 
+  // #11 — Role badge helper
+  const RoleBadge = () => (
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold mt-1 ${
+      user?.role === 'admin' ? 'bg-brand/10 text-brand' : 'bg-positive/10 text-positive'
+    }`}>
+      {user?.role === 'admin' ? 'Administrator' : 'Staf'}
+    </span>
+  );
+
   return (
     <div className="min-h-screen bg-paper text-ink lg:flex">
       {/* ── Desktop Sidebar ── */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:shrink-0 lg:sticky lg:top-0 lg:h-screen bg-surface border-r border-rule px-4 py-5">
+      {/* #8 — dark mode gradient */}
+      <aside
+        className="hidden lg:flex lg:flex-col lg:w-64 lg:shrink-0 lg:sticky lg:top-0 lg:h-screen bg-surface border-r border-rule px-4 py-5"
+        style={isDark ? { background: 'linear-gradient(180deg, rgb(20 25 38) 0%, rgb(17 21 32) 100%)' } : undefined}
+      >
         <div className="px-2">
           <Wordmark />
         </div>
@@ -90,7 +109,7 @@ const Layout = ({ user, setUser }) => {
           <NavList />
         </div>
 
-        {/* User & actions */}
+        {/* #11 — user card with role badge */}
         <div className="mt-auto pt-4 border-t border-rule">
           <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl mb-1">
             <div className="w-8 h-8 rounded-lg bg-brand/15 flex items-center justify-center text-brand text-xs font-bold font-serif shrink-0">
@@ -99,6 +118,7 @@ const Layout = ({ user, setUser }) => {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-ink truncate leading-tight">{user?.name}</p>
               <p className="text-xs text-muted truncate">{user?.username}</p>
+              <RoleBadge />
             </div>
           </div>
           <div className="flex items-center gap-1 px-1">
@@ -106,7 +126,7 @@ const Layout = ({ user, setUser }) => {
             <button
               type="button"
               onClick={handleLogout}
-              className="btn-ghost flex-1 justify-start text-negative hover:text-negative hover:bg-negative/8 text-sm"
+              className="btn-ghost flex-1 justify-start text-negative hover:text-negative hover:bg-negative/10 text-sm"
             >
               <LogOut size={14} />
               Keluar
@@ -141,8 +161,19 @@ const Layout = ({ user, setUser }) => {
           </div>
         </header>
 
+        {/* #10 — Page transition with AnimatePresence */}
         <main className="max-w-[1140px] mx-auto px-4 sm:px-6 lg:px-10 py-8 lg:py-10">
-          <Outlet />
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
 
@@ -153,7 +184,13 @@ const Layout = ({ user, setUser }) => {
             className="absolute inset-0 bg-ink/40 backdrop-blur-sm"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute left-0 top-0 bottom-0 w-72 bg-surface border-r border-rule p-5 flex flex-col shadow-2xl">
+          <div
+            className="absolute left-0 top-0 bottom-0 w-72 border-r border-rule p-5 flex flex-col shadow-2xl"
+            style={isDark
+              ? { background: 'linear-gradient(180deg, rgb(20 25 38) 0%, rgb(17 21 32) 100%)' }
+              : { background: 'rgb(var(--surface))' }
+            }
+          >
             <div className="flex items-center justify-between mb-6 px-2">
               <Wordmark />
               <button
@@ -179,6 +216,7 @@ const Layout = ({ user, setUser }) => {
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-ink truncate">{user?.name}</p>
                   <p className="text-xs text-muted">{user?.username}</p>
+                  <RoleBadge />
                 </div>
               </div>
               <div className="flex items-center gap-1 px-1">
@@ -186,7 +224,7 @@ const Layout = ({ user, setUser }) => {
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="btn-ghost flex-1 justify-start text-negative hover:text-negative hover:bg-negative/8"
+                  className="btn-ghost flex-1 justify-start text-negative hover:text-negative hover:bg-negative/10"
                 >
                   <LogOut size={14} />
                   Keluar

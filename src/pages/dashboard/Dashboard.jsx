@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { TrendingUp, Database, CalendarDays, AlertTriangle, RefreshCw } from 'lucide-react';
+import { SkeletonStatCard, SkeletonChart } from '../../components/common/Skeleton';
 import { ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { useTheme, chartTheme } from '../../context/theme';
 import { useTickets } from '../../hooks/useTickets';
@@ -63,9 +64,11 @@ export default function Dashboard() {
 
       {/* ── Status / Loading ── */}
       {loading && (
-        <div className="flex items-center gap-3 text-muted text-sm">
-          <RefreshCw size={14} className="animate-spin" />
-          Memuat data…
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => <SkeletonStatCard key={i} />)}
+          </div>
+          <SkeletonChart />
         </div>
       )}
       {error && (
@@ -272,8 +275,17 @@ export default function Dashboard() {
                 disabled={rows.length < MIN_WEEKS_TRAIN || retrain.status === 'berjalan'}
                 onClick={() => requestRetrain(rows, { delayMs: 0, trigger: 'manual' })}
               >
-                <RefreshCw size={14} />
-                Latih ulang sekarang
+                {retrain.status === 'berjalan' ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-rule border-t-brand rounded-full animate-spin" />
+                    Melatih…
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={14} />
+                    Latih ulang sekarang
+                  </>
+                )}
               </button>
             </section>
           </div>

@@ -585,9 +585,10 @@ const DataInput = () => {
       <motion.div variants={itemV} className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-3xl font-semibold tracking-tight text-ink ">Data Penjualan</h1>
+            <p className="eyebrow">Manajemen Data</p>
             {!isOnline && <span className="badge badge-warning">Server tidak terjangkau</span>}
           </div>
+          <h1 className="text-3xl font-semibold tracking-tight text-ink ">Data Penjualan</h1>
           <p className="text-muted text-sm font-medium">
             Kelola database penjualan tiket pesawat. Total: <strong className="text-brand ">{data.length.toLocaleString()}</strong> record.
           </p>
@@ -673,8 +674,38 @@ const DataInput = () => {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto rounded-md border border-rule relative">
+        {/* Mobile card list */}
+        <div className="sm:hidden space-y-2 mb-4">
+          {displayedData.map((item) => (
+            <div key={item.id} className="bg-surface border border-rule rounded-2xl p-4 flex items-center justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-ink text-sm">{item.sale_date}</p>
+                <p className="text-muted text-xs mt-0.5">
+                  M{item.week}/{item.year} · {parseInt(item.tickets_sold).toLocaleString()} tiket · Rp {parseFloat(item.ticket_price || 0).toLocaleString()}rb
+                </p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <button onClick={() => handleEdit(item)} className="p-2 rounded-xl bg-brand/10 text-brand hover:bg-brand/20 transition-colors">
+                  <Edit2 size={13} />
+                </button>
+                <button onClick={() => handleDelete(item.id)} className="p-2 rounded-xl bg-negative/10 text-negative hover:bg-negative/20 transition-colors">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            </div>
+          ))}
+          {!loading && displayedData.length === 0 && (
+            <div className="text-center py-10">
+              <Database size={36} className="mx-auto mb-3 text-rule" />
+              <p className="text-sm font-semibold text-muted">
+                {searchTerm ? 'Tidak ada data yang cocok.' : 'Belum ada data tersedia.'}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden sm:block overflow-x-auto rounded-md border border-rule relative">
           {loading && (
             <div className="absolute inset-0 bg-surface z-10 flex items-center justify-center rounded-md">
               <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full" />
@@ -690,7 +721,7 @@ const DataInput = () => {
                       : <Square size={16} />}
                   </button>
                 </th>
-                {['No', 'ID', 'Tanggal', 'Mgg/Thn', 'Tiket Terjual', 'Harga tiket (ribu Rp)', 'Input', 'Aksi'].map(h => (
+                {['No', 'Tanggal', 'Mgg/Thn', 'Tiket Terjual', 'Harga tiket (ribu Rp)', 'Input', 'Aksi'].map(h => (
                   <th key={h} className="px-4 py-3.5 font-semibold tracking-wider border-b border-rule ">{h}</th>
                 ))}
               </tr>
@@ -715,7 +746,6 @@ const DataInput = () => {
                         </button>
                       </td>
                       <td className="px-4 py-3.5 text-muted text-xs">{(currentPage - 1) * (rowsPerPage === 'all' ? 0 : rowsPerPage) + idx + 1}</td>
-                      <td className="px-4 py-3.5 font-mono text-xs text-muted">{item.id}</td>
                       <td className="px-4 py-3.5 font-bold text-brand text-xs">{item.sale_date}</td>
                       <td className="px-4 py-3.5 text-xs text-muted ">M{item.week}/{item.year}</td>
                       <td className="px-4 py-3.5 font-semibold text-ink text-right tabular-nums">
@@ -728,7 +758,7 @@ const DataInput = () => {
                         {item.created_at ? new Date(item.created_at).toLocaleDateString('id-ID') : '-'}
                       </td>
                       <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-1.5 transition-opacity">
                           <motion.button onClick={() => handleEdit(item)} className="p-1.5 rounded-lg bg-primary/10 text-brand hover:bg-primary/20 transition-colors">
                             <Edit2 size={13} />
                           </motion.button>
@@ -743,7 +773,7 @@ const DataInput = () => {
               </AnimatePresence>
               {!loading && displayedData.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-16 text-center">
+                  <td colSpan={8} className="px-4 py-16 text-center">
                     <Database size={40} className="mx-auto mb-3 text-gray-200 " />
                     <p className="text-muted font-medium">
                       {searchTerm ? 'Tidak ada data yang cocok.' : 'Belum ada data tersedia.'}

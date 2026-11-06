@@ -126,16 +126,34 @@ export default function LstmProcess() {
         <p className="mt-2 text-muted max-w-[62ch]">Setiap data baru juga memicu pelatihan otomatis. Halaman ini untuk menjalankan dan memeriksa prosesnya secara manual.</p>
       </header>
 
-      <ol className="mt-8 flex gap-6 border-b border-rule overflow-x-auto">
+      <div className="mt-8 mb-2 flex items-center gap-2 flex-wrap">
         {STEPS.map((s, i) => (
-          <li key={s}>
-            <button type="button" disabled={i + 1 > maxStep} onClick={() => setStep(i + 1)}
-              className={`pb-3 -mb-px border-b-2 text-sm whitespace-nowrap ${step === i + 1 ? 'border-brand text-ink font-semibold' : 'border-transparent text-muted disabled:opacity-60'}`}>
-              <span className="font-serif mr-2">{i + 1}</span>{s}
+          <div key={s} className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={i + 1 > maxStep}
+              onClick={() => setStep(i + 1)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${
+                step === i + 1
+                  ? 'bg-brand text-white shadow-sm'
+                  : i + 1 < step
+                  ? 'bg-positive/10 text-positive border border-positive/20'
+                  : 'bg-rule/50 text-muted hover:bg-rule'
+              }`}
+            >
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                step === i + 1 ? 'bg-white/20' : i + 1 < step ? 'bg-positive/20' : 'bg-ink/10'
+              }`}>
+                {i + 1 < step ? '✓' : i + 1}
+              </span>
+              {s}
             </button>
-          </li>
+            {i < STEPS.length - 1 && (
+              <div className={`h-px w-6 ${i + 1 < step ? 'bg-positive/40' : 'bg-rule'}`} />
+            )}
+          </div>
         ))}
-      </ol>
+      </div>
 
       {loading && <p className="mt-8 text-muted">Memuat data…</p>}
       {error && <div className="mt-8 note-negative" role="alert"><p>{error}</p><button type="button" onClick={reload} className="mt-2 text-brand underline underline-offset-4">Coba lagi</button></div>}

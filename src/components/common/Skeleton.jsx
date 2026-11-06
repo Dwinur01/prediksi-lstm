@@ -2,23 +2,36 @@
  * Skeleton loading components shared across pages.
  */
 
+export const SkeletonStatCard = () => (
+  <div className="stat-card animate-pulse">
+    <div className="flex items-start justify-between">
+      <div className="h-3 w-24 bg-rule rounded-full" />
+      <div className="w-8 h-8 rounded-xl bg-rule" />
+    </div>
+    <div className="h-8 w-20 bg-rule rounded-lg mt-2" />
+    <div className="h-3 w-28 bg-rule rounded-full" />
+  </div>
+);
+
 export const SkeletonCard = () => (
-  <div className="rounded-md p-6 bg-ink/5 border border-rule space-y-4">
-    <div className="w-10 h-10 rounded-md bg-ink/5 " />
-    <div className="h-3 w-24 rounded bg-ink/5 " />
-    <div className="h-8 w-32 rounded bg-ink/5 " />
+  <div className="bg-surface border border-rule rounded-2xl p-6 animate-pulse space-y-4">
+    <div className="h-4 w-32 bg-rule rounded-full" />
+    <div className="h-8 w-20 bg-rule rounded-lg" />
+    <div className="h-3 w-24 bg-rule rounded-full" />
   </div>
 );
 
 export const SkeletonChart = () => (
-  <div className="h-full rounded-md bg-ink/5 relative overflow-hidden">
-    <div className="absolute inset-0">
-      <div className="absolute bottom-0 left-0 right-0 flex items-end gap-2 px-4 pb-4">
-        {Array.from({ length: 12 }).map((_, i) => (
+  <div className="bg-surface border border-rule rounded-2xl p-6 animate-pulse">
+    <div className="h-4 w-40 bg-rule rounded-full mb-2" />
+    <div className="h-3 w-56 bg-rule rounded-full mb-6" />
+    <div className="h-[280px] bg-rule/50 rounded-xl relative overflow-hidden">
+      <div className="absolute inset-0 flex items-end gap-1 px-6 pb-6">
+        {Array.from({ length: 20 }).map((_, i) => (
           <div
             key={i}
-            className="flex-1 bg-ink/5 rounded-t"
-            style={{ height: `${20 + Math.sin(i * 0.8) * 30 + 30}%` }}
+            className="flex-1 bg-rule rounded-t-sm"
+            style={{ height: `${25 + Math.sin(i * 0.6) * 25 + 25}%` }}
           />
         ))}
       </div>
@@ -27,19 +40,23 @@ export const SkeletonChart = () => (
 );
 
 export const SkeletonTable = () => (
-  <div className=" space-y-3">
-    <div className="h-10 bg-ink/5 rounded-md" />
+  <div className="bg-surface border border-rule rounded-2xl p-6 animate-pulse space-y-3">
+    <div className="h-4 w-32 bg-rule rounded-full mb-4" />
+    <div className="h-10 bg-rule/50 rounded-xl" />
     {Array.from({ length: 5 }).map((_, i) => (
-      <div key={i} className="h-12 bg-ink/5 rounded-md" />
+      <div key={i} className="h-12 bg-rule/30 rounded-xl" />
     ))}
   </div>
 );
 
 export const SkeletonRow = () => (
-  <tr className="">
+  <tr>
     {Array.from({ length: 7 }).map((_, i) => (
       <td key={i} className="px-4 py-4">
-        <div className="h-4 bg-ink/5 rounded" style={{ width: `${40 + (i * 17) % 40}px` }} />
+        <div
+          className="h-4 bg-rule rounded-full animate-pulse"
+          style={{ width: `${40 + (i * 17) % 40}px` }}
+        />
       </td>
     ))}
   </tr>
