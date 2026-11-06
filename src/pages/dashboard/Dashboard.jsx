@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { TrendingUp, Database, CalendarDays, AlertTriangle, RefreshCw } from 'lucide-react';
 import { ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { useTheme, chartTheme } from '../../context/theme';
 import { useTickets } from '../../hooks/useTickets';
@@ -21,7 +22,6 @@ export default function Dashboard() {
   const audit = useMemo(() => auditData(rows), [rows]);
   const status = useMemo(() => (rows.length ? activeStatus(rows) : { exists: false }), [rows, retrain.finishedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Model pertama dilatih otomatis bila belum ada dan data cukup.
   useEffect(() => {
     if (!loading && !error && rows.length >= MIN_WEEKS_TRAIN && !loadActive() && retrain.status === 'idle') {
       requestRetrain(rows, { delayMs: 800, trigger: 'pemulihan' });
@@ -50,126 +50,268 @@ export default function Dashboard() {
   }, [rows, entry]);
 
   const next = view?.forecast?.[0];
-  const endLabel = (text, color, lastIdx) => ({ x, y, index }) => (index === lastIdx ? <text x={x + 8} y={y + 4} fill={color} fontSize={12} fontWeight={600}>{text}</text> : null);
+  const endLabel = (text, color, lastIdx) => ({ x, y, index }) =>
+    index === lastIdx ? <text x={x + 8} y={y + 4} fill={color} fontSize={11} fontWeight={600}>{text}</text> : null;
 
   return (
-    <div>
+    <div className="space-y-8">
+      {/* ── Page Header ── */}
       <header>
         <p className="eyebrow">{view ? `Data hingga minggu ${fmtDate(view.last.date)}` : 'Ringkasan'}</p>
         <h1 className="mt-2 text-3xl lg:text-4xl">Ringkasan penjualan</h1>
       </header>
 
-      {loading && <p className="mt-8 text-muted">Memuat data…</p>}
+      {/* ── Status / Loading ── */}
+      {loading && (
+        <div className="flex items-center gap-3 text-muted text-sm">
+          <RefreshCw size={14} className="animate-spin" />
+          Memuat data…
+        </div>
+      )}
       {error && (
-        <div className="mt-8 note-negative" role="alert">
+        <div className="note-negative" role="alert">
           <p>{error}</p>
-          <button type="button" onClick={reload} className="mt-2 text-brand underline underline-offset-4">Coba lagi</button>
+          <button type="button" onClick={reload} className="mt-2 text-brand underline underline-offset-4 text-sm">
+            Coba lagi
+          </button>
         </div>
       )}
       {!loading && !error && rows.length === 0 && (
-        <p className="mt-8">Belum ada data penjualan. <Link to="/dashboard/data-input" className="text-brand underline underline-offset-4">Tambahkan data</Link> untuk mulai.</p>
+        <div className="note-brand">
+          <p>Belum ada data penjualan.</p>
+          <Link to="/dashboard/data-input" className="mt-1 inline-block text-brand font-semibold underline underline-offset-4 text-sm">
+            Tambahkan data pertama →
+          </Link>
+        </div>
       )}
 
       {view && (
         <>
-          <section className="mt-8 grid lg:grid-cols-[1fr_1fr] gap-8 items-end border-t border-rule pt-6">
-            <div>
-              <p className="eyebrow">Perkiraan minggu depan</p>
+          {/* ── Stat Cards ── */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Perkiraan minggu depan */}
+            <div className="stat-card col-span-2 lg:col-span-1">
+              <div className="flex items-start justify-between">
+                <span className="stat-card-label">Perkiraan minggu depan</span>
+                <div className="w-8 h-8 rounded-xl bg-brand/10 flex items-center justify-center shrink-0">
+                  <TrendingUp size={14} className="text-brand" />
+                </div>
+              </div>
               {next ? (
                 <>
-                  <p className="figure-value mt-2">{fmt(next.value)} <span className="text-lg font-sans font-normal text-muted">tiket</span></p>
-                  <p className="figure-note mt-2">
-                    Minggu mulai {fmtDate(next.date)}
-                    {view.mae != null && <> · rentang {fmt(Math.max(0, next.value - view.mae))}–{fmt(next.value + view.mae)} (± kesalahan uji)</>}
+                  <p className="stat-card-value">{fmt(next.value)}</p>
+                  <p className="text-xs text-muted">
+                    tiket · {fmtDate(next.date)}
+                    {view.mae != null && <span className="block mt-0.5">± {fmt(view.mae, 0)} (rentang uji)</span>}
                   </p>
                 </>
               ) : (
                 <>
-                  <p className="figure-value mt-2">{fmt(view.baselineMean)} <span className="text-lg font-sans font-normal text-muted">tiket</span></p>
-                  <p className="figure-note mt-2">Perkiraan sementara: rata-rata seluruh riwayat. Belum ada model terlatih.</p>
+                  <p className="stat-card-value">{fmt(view.baselineMean)}</p>
+                  <p className="text-xs text-muted">tiket · rata-rata sementara</p>
                 </>
               )}
             </div>
-            <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-              <div><dt className="eyebrow">Rata-rata latih</dt><dd className="mt-0.5 text-lg font-semibold">{fmt(view.baselineMean)}</dd></div>
-              <div><dt className="eyebrow">Minggu terakhir</dt><dd className="mt-0.5 text-lg font-semibold">{fmt(view.last.td, 0)}</dd></div>
-              <div><dt className="eyebrow">Jumlah minggu data</dt><dd className="mt-0.5 text-lg font-semibold">{rows.length}</dd></div>
-              <div><dt className="eyebrow">Libur minggu depan</dt><dd className="mt-0.5 text-lg font-semibold">{next ? (next.libur ? 'Ya' : 'Tidak') : '—'}</dd></div>
-            </dl>
-          </section>
 
-          <section className="mt-10">
-            <h2 className="text-xl">Penjualan dan perkiraan</h2>
-            <p className="figure-note mt-1">26 minggu terakhir dan 4 minggu ke depan. Garis putus-putus = rata-rata latih.</p>
-            <div className="mt-4 h-[320px]" role="img" aria-label="Grafik penjualan mingguan dan perkiraan">
+            {/* Rata-rata */}
+            <div className="stat-card">
+              <span className="stat-card-label">Rata-rata latih</span>
+              <p className="stat-card-value">{fmt(view.baselineMean)}</p>
+              <p className="text-xs text-muted">tiket/minggu</p>
+            </div>
+
+            {/* Penjualan terakhir */}
+            <div className="stat-card">
+              <span className="stat-card-label">Penjualan terakhir</span>
+              <p className="stat-card-value">{fmt(view.last.td, 0)}</p>
+              <p className="text-xs text-muted">tiket</p>
+            </div>
+
+            {/* Total data */}
+            <div className="stat-card">
+              <div className="flex items-start justify-between">
+                <span className="stat-card-label">Total data</span>
+                <div className="w-8 h-8 rounded-xl bg-ink/5 flex items-center justify-center shrink-0">
+                  <Database size={13} className="text-muted" />
+                </div>
+              </div>
+              <p className="stat-card-value">{rows.length}</p>
+              <p className="text-xs text-muted">minggu</p>
+            </div>
+          </div>
+
+          {/* ── Notifikasi retrain ── */}
+          {(STATUS_TEXT[retrain.status] || (retrain.status === 'selesai' && retrain.reason)) && (
+            <div className={retrain.status === 'selesai' && retrain.decision === 'ditahan' ? 'note-caution' : retrain.status === 'selesai' ? 'note-positive' : 'note-brand'}>
+              {STATUS_TEXT[retrain.status] && (
+                <span>
+                  {STATUS_TEXT[retrain.status]}
+                  {retrain.status === 'berjalan' && retrain.epoch ? ` (${retrain.variant === 'warm' ? 'lanjutan' : 'dari nol'}, epoch ${retrain.epoch})` : ''}
+                </span>
+              )}
+              {retrain.status === 'selesai' && retrain.reason && <span>{retrain.reason}</span>}
+            </div>
+          )}
+          {retrain.status === 'gagal' && <p className="note-negative">{retrain.message}</p>}
+          {retrain.status === 'data_kurang' && <p className="note-caution">{retrain.message}</p>}
+          {status.exists && status.stale && (
+            <p className="note-caution">Model dilatih pada data hingga {fmtDate(entry.snapshot.last_week)}: {status.stale}.</p>
+          )}
+
+          {/* ── Chart ── */}
+          <section className="bg-surface border border-rule rounded-2xl p-6" style={{ boxShadow: '0 1px 3px rgb(0 0 0 / 0.04)' }}>
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-ink">Penjualan dan perkiraan</h2>
+                <p className="figure-note text-xs mt-0.5">26 minggu terakhir dan 4 minggu ke depan · garis putus-putus = rata-rata latih</p>
+              </div>
+            </div>
+            <div className="h-[300px]" role="img" aria-label="Grafik penjualan mingguan dan perkiraan">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={view.data} margin={{ top: 8, right: 64, bottom: 0, left: 0 }}>
-                  <CartesianGrid stroke={c.rule} strokeOpacity={0.6} vertical={false} />
-                  <XAxis dataKey="label" tick={{ fill: c.muted, fontSize: 12 }} tickLine={false} axisLine={{ stroke: c.rule }} interval="preserveStartEnd" minTickGap={28} />
-                  <YAxis tick={{ fill: c.muted, fontSize: 12 }} tickLine={false} axisLine={false} width={32} domain={['auto', 'auto']} />
+                <ComposedChart data={view.data} margin={{ top: 8, right: 60, bottom: 0, left: 0 }}>
+                  <CartesianGrid stroke={c.rule} strokeOpacity={0.5} vertical={false} />
+                  <XAxis dataKey="label" tick={{ fill: c.muted, fontSize: 11 }} tickLine={false} axisLine={{ stroke: c.rule }} interval="preserveStartEnd" minTickGap={28} />
+                  <YAxis tick={{ fill: c.muted, fontSize: 11 }} tickLine={false} axisLine={false} width={32} domain={['auto', 'auto']} />
                   <Tooltip
-                    cursor={{ stroke: c.muted, strokeDasharray: '3 3' }}
+                    cursor={{ stroke: c.muted, strokeDasharray: '3 3', strokeWidth: 1 }}
                     content={({ active, payload }) => active && payload?.length ? (
-                      <div className="bg-surface border border-rule rounded px-3 py-2 text-sm">
-                        <p className="font-semibold">{fmtDate(payload[0].payload.date)}</p>
-                        {payload[0].payload.aktual != null && <p>Aktual: {fmt(payload[0].payload.aktual, 0)}</p>}
-                        {payload[0].payload.prediksi != null && payload[0].payload.band && <p className="text-brand">Perkiraan: {fmt(payload[0].payload.prediksi)}</p>}
+                      <div className="bg-surface border border-rule rounded-xl px-3.5 py-2.5 text-sm shadow-lg">
+                        <p className="font-semibold mb-1">{fmtDate(payload[0].payload.date)}</p>
+                        {payload[0].payload.aktual != null && <p className="text-muted">Aktual: <span className="text-ink font-medium">{fmt(payload[0].payload.aktual, 0)}</span></p>}
+                        {payload[0].payload.prediksi != null && payload[0].payload.band && <p className="text-brand">Perkiraan: <span className="font-medium">{fmt(payload[0].payload.prediksi)}</span></p>}
                       </div>
                     ) : null}
                   />
-                  <ReferenceLine y={view.baselineMean} stroke={c.muted} strokeDasharray="5 4" />
-                  <Area dataKey="band" stroke="none" fill={c.brand} fillOpacity={0.12} isAnimationActive={false} connectNulls />
-                  <Line dataKey="aktual" stroke={c.ink} strokeWidth={1.5} dot={false} isAnimationActive={false} label={endLabel('Aktual', c.ink, 25)} />
-                  <Line dataKey="prediksi" stroke={c.brand} strokeWidth={1.75} strokeDasharray={view.forecast.length ? undefined : '0'} dot={{ r: 3, fill: c.brand, stroke: c.brand }} isAnimationActive={false} connectNulls label={endLabel('Perkiraan', c.brand, view.data.length - 1)} />
+                  <ReferenceLine y={view.baselineMean} stroke={c.muted} strokeDasharray="5 4" strokeOpacity={0.6} />
+                  <Area dataKey="band" stroke="none" fill={c.brand} fillOpacity={0.1} isAnimationActive={false} connectNulls />
+                  <Line dataKey="aktual" stroke={c.ink} strokeWidth={2} dot={false} isAnimationActive={false} label={endLabel('Aktual', c.ink, 25)} />
+                  <Line dataKey="prediksi" stroke={c.brand} strokeWidth={2} strokeDasharray={view.forecast.length ? undefined : '0'} dot={{ r: 3.5, fill: c.brand, stroke: 'white', strokeWidth: 1.5 }} isAnimationActive={false} connectNulls label={endLabel('Perkiraan', c.brand, view.data.length - 1)} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
           </section>
 
-          <div className="mt-10 grid lg:grid-cols-2 gap-10">
-            <section>
-              <h2 className="text-xl">Evaluasi model</h2>
+          {/* ── Bottom grid: Evaluasi + Catatan ── */}
+          <div className="grid lg:grid-cols-2 gap-6">
+            {/* Evaluasi model */}
+            <section className="bg-surface border border-rule rounded-2xl p-6" style={{ boxShadow: '0 1px 3px rgb(0 0 0 / 0.04)' }}>
+              <h2 className="text-lg font-semibold text-ink mb-1">Evaluasi model</h2>
               {entry?.metrics?.test ? (
                 <>
-                  <p className="figure-note mt-1">Diuji pada {entry.window?.n} minggu terbaru yang tidak dipakai melatih ({fmtShort(entry.window?.from)}–{fmtShort(entry.window?.to)}).</p>
-                  <table className="table-editorial mt-3">
-                    <thead><tr><th>Cara memperkirakan</th><th className="num">MAE</th><th className="num">RMSE</th></tr></thead>
+                  <p className="figure-note text-xs mb-4">
+                    Diuji pada {entry.window?.n} minggu terbaru ({fmtShort(entry.window?.from)}–{fmtShort(entry.window?.to)})
+                  </p>
+                  <table className="table-editorial">
+                    <thead>
+                      <tr>
+                        <th>Cara memperkirakan</th>
+                        <th className="num">MAE</th>
+                        <th className="num">RMSE</th>
+                      </tr>
+                    </thead>
                     <tbody>
-                      <tr><td className="font-semibold">Model LSTM</td><td className="num">{fmt(entry.metrics.test.mae, 2)}</td><td className="num">{fmt(entry.metrics.test.rmse, 2)}</td></tr>
-                      <tr><td>Rata-rata data latih</td><td className="num">{fmt(entry.baselines.mean.mae, 2)}</td><td className="num">{fmt(entry.baselines.mean.rmse, 2)}</td></tr>
-                      <tr><td>Sama dengan minggu lalu</td><td className="num">{fmt(entry.baselines.naive.mae, 2)}</td><td className="num">{fmt(entry.baselines.naive.rmse, 2)}</td></tr>
+                      <tr>
+                        <td className="font-semibold text-brand">Model LSTM</td>
+                        <td className="num">{fmt(entry.metrics.test.mae, 2)}</td>
+                        <td className="num">{fmt(entry.metrics.test.rmse, 2)}</td>
+                      </tr>
+                      <tr>
+                        <td className="text-muted">Rata-rata data latih</td>
+                        <td className="num">{fmt(entry.baselines.mean.mae, 2)}</td>
+                        <td className="num">{fmt(entry.baselines.mean.rmse, 2)}</td>
+                      </tr>
+                      <tr>
+                        <td className="text-muted">Sama dengan minggu lalu</td>
+                        <td className="num">{fmt(entry.baselines.naive.mae, 2)}</td>
+                        <td className="num">{fmt(entry.baselines.naive.rmse, 2)}</td>
+                      </tr>
                     </tbody>
                   </table>
-                  <p className="figure-note mt-2">Satuan: tiket per minggu. Semakin kecil semakin baik.</p>
+                  <p className="figure-note text-xs mt-2">Satuan: tiket per minggu. Semakin kecil semakin baik.</p>
                 </>
-              ) : <p className="mt-3 text-muted">Belum ada model terlatih. {rows.length < MIN_WEEKS_TRAIN && `Model dilatih setelah data mencapai ${MIN_WEEKS_TRAIN} minggu.`}</p>}
+              ) : (
+                <p className="mt-3 text-muted text-sm">
+                  Belum ada model terlatih.{' '}
+                  {rows.length < MIN_WEEKS_TRAIN && `Model dilatih setelah data mencapai ${MIN_WEEKS_TRAIN} minggu.`}
+                </p>
+              )}
             </section>
 
-            <section>
-              <h2 className="text-xl">Catatan</h2>
-              <div className="mt-3 space-y-3">
-                {STATUS_TEXT[retrain.status] && <p className="note-brand">{STATUS_TEXT[retrain.status]}{retrain.status === 'berjalan' && retrain.epoch ? ` (${retrain.variant === 'warm' ? 'lanjutan' : 'dari nol'}, epoch ${retrain.epoch})` : ''}</p>}
-                {retrain.status === 'selesai' && retrain.reason && <p className={retrain.decision === 'ditahan' ? 'note-caution' : 'note-positive'}>{retrain.reason}</p>}
-                {retrain.status === 'gagal' && <p className="note-negative">{retrain.message}</p>}
-                {retrain.status === 'data_kurang' && <p className="note-caution">{retrain.message}</p>}
-                {status.exists && status.stale && <p className="note-caution">Model dilatih pada data hingga {fmtDate(entry.snapshot.last_week)}: {status.stale}.</p>}
-                {entry && entry.beatsMean === false && <p className="note-caution">Model belum melampaui tebakan rata-rata pada data uji. Gunakan perkiraan ini sebagai pembanding, bukan satu-satunya dasar keputusan.</p>}
-                {view.realError && <p className="note">Galat nyata: MAE {fmt(view.realError.mae, 2)} pada {view.realError.n} minggu baru yang belum pernah dilihat model.</p>}
-                {next && <p className="note">Perkiraan lebih dari satu minggu mengandaikan harga tiket tetap seperti minggu terakhir.</p>}
-                {audit.problems.length > 0 && <p className="note-caution">Masalah pada data: {audit.problems.join(', ')}. <Link to="/dashboard/data-input" className="text-brand underline underline-offset-4">Periksa data</Link></p>}
-                <button type="button" className="btn-secondary" disabled={rows.length < MIN_WEEKS_TRAIN || retrain.status === 'berjalan'} onClick={() => requestRetrain(rows, { delayMs: 0, trigger: 'manual' })}>Latih ulang sekarang</button>
+            {/* Catatan & aksi */}
+            <section className="bg-surface border border-rule rounded-2xl p-6 flex flex-col" style={{ boxShadow: '0 1px 3px rgb(0 0 0 / 0.04)' }}>
+              <h2 className="text-lg font-semibold text-ink mb-3">Catatan</h2>
+              <div className="flex-1 space-y-2.5 text-sm">
+                {entry && entry.beatsMean === false && (
+                  <div className="note-caution">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle size={13} className="text-caution mt-0.5 shrink-0" />
+                      <p>Model belum melampaui tebakan rata-rata pada data uji. Gunakan perkiraan ini sebagai pembanding, bukan satu-satunya dasar keputusan.</p>
+                    </div>
+                  </div>
+                )}
+                {view.realError && (
+                  <p className="note">
+                    Galat nyata: MAE {fmt(view.realError.mae, 2)} pada {view.realError.n} minggu baru.
+                  </p>
+                )}
+                {next && (
+                  <p className="note">
+                    Perkiraan lebih dari satu minggu mengandaikan harga tiket tetap seperti minggu terakhir.
+                  </p>
+                )}
+                {audit.problems.length > 0 && (
+                  <div className="note-caution">
+                    Masalah pada data: {audit.problems.join(', ')}.{' '}
+                    <Link to="/dashboard/data-input" className="text-brand underline underline-offset-4">Periksa data</Link>
+                  </div>
+                )}
               </div>
+              <button
+                type="button"
+                className="btn-secondary mt-4 w-full"
+                disabled={rows.length < MIN_WEEKS_TRAIN || retrain.status === 'berjalan'}
+                onClick={() => requestRetrain(rows, { delayMs: 0, trigger: 'manual' })}
+              >
+                <RefreshCw size={14} />
+                Latih ulang sekarang
+              </button>
             </section>
           </div>
 
-          <section className="mt-10">
-            <div className="flex items-baseline justify-between"><h2 className="text-xl">Data terbaru</h2><Link to="/dashboard/data-input" className="text-brand underline underline-offset-4 text-sm">Kelola data</Link></div>
+          {/* ── Data terbaru ── */}
+          <section className="bg-surface border border-rule rounded-2xl p-6" style={{ boxShadow: '0 1px 3px rgb(0 0 0 / 0.04)' }}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <CalendarDays size={16} className="text-muted" />
+                <h2 className="text-lg font-semibold text-ink">Data terbaru</h2>
+              </div>
+              <Link to="/dashboard/data-input" className="text-brand text-sm font-medium hover:underline underline-offset-4">
+                Kelola data →
+              </Link>
+            </div>
             <div className="overflow-x-auto">
-              <table className="table-editorial mt-3">
-                <thead><tr><th>Minggu mulai</th><th className="num">Tiket</th><th className="num">Harga (ribu Rp)</th><th>Libur</th></tr></thead>
+              <table className="table-editorial">
+                <thead>
+                  <tr>
+                    <th>Minggu mulai</th>
+                    <th className="num">Tiket</th>
+                    <th className="num">Harga (ribu Rp)</th>
+                    <th>Libur</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {[...rows].slice(-6).reverse().map((r) => (
-                    <tr key={r.date}><td>{fmtDate(r.date)}</td><td className="num">{fmt(r.td, 0)}</td><td className="num">{fmt(r.price, 0)}</td><td>{r.libur ? 'Ya' : 'Tidak'}</td></tr>
+                    <tr key={r.date}>
+                      <td className="font-medium">{fmtDate(r.date)}</td>
+                      <td className="num font-semibold text-ink">{fmt(r.td, 0)}</td>
+                      <td className="num">{fmt(r.price, 0)}</td>
+                      <td>
+                        {r.libur
+                          ? <span className="badge badge-warning">Ya</span>
+                          : <span className="text-muted text-xs">Tidak</span>
+                        }
+                      </td>
+                    </tr>
                   ))}
                 </tbody>
               </table>
