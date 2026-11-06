@@ -114,6 +114,27 @@ function init_sqlite_db($conn) {
         weights_json TEXT,
         FOREIGN KEY (history_id) REFERENCES prediction_history(id) ON DELETE CASCADE
     )");
+
+    // 5. Create training_jobs table
+    $conn->exec("CREATE TABLE IF NOT EXISTS training_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trigger_type TEXT NOT NULL,
+        target_data_hash TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        phase TEXT NULL,
+        progress INTEGER NOT NULL DEFAULT 0,
+        started_by INTEGER NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        started_at DATETIME NULL,
+        heartbeat_at DATETIME NULL,
+        finished_at DATETIME NULL,
+        running_key INTEGER NULL UNIQUE,
+        error_message TEXT NULL,
+        result_decision TEXT NULL,
+        result_history_id INTEGER NULL,
+        FOREIGN KEY (started_by) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY (result_history_id) REFERENCES prediction_history(id) ON DELETE SET NULL
+    )");
     
     // 5. Seed excel data if exists
     $data_file = __DIR__ . '/excel_data.json';

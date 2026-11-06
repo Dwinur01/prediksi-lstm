@@ -5,9 +5,8 @@ import { runRetrain } from './retrain.js';
 import { loadActive, saveActive, pushLog } from './modelStore.js';
 
 /**
- * Pelatihan ulang otomatis langsung setelah data disimpan (keputusan pengguna; docs/06 §13.1).
+ * Pelatihan ulang otomatis dengan koordinasi job global via tabel `training_jobs` (docs/04 §2.7, docs/05 §3.3c).
  * Berjalan di peramban dengan jeda 3 dtk; job baru membatalkan job lama.
- * TODO(Antigravity): kunci satu-job-global via tabel `training_jobs` (docs/04 §2.7, docs/05 §3.3c).
  */
 let state = { status: 'idle', phase: null, epoch: 0, variant: null, message: '', decision: null, reason: '', finishedAt: null };
 const listeners = new Set();
@@ -60,3 +59,62 @@ async function execute(rows, trigger) {
 }
 
 export const cancelRetrain = () => { clearTimeout(timer); runId++; set({ status: 'idle', phase: null, message: '' }); };
+
+/**
+ * Integrasi sinkronisasi training_jobs di backend server (docs/05 §3.3c).
+ */
+export async function createTrainingJob(api, { trigger = 'manual', targetDataHash }) {
+  if (!api || !targetDataHash) return null;
+  try {
+    const res = await api.post('/data/training-jobs.php', { trigger_type: trigger, target_data_hash: targetDataHash });
+    return res.data?.data ?? null;
+  } catch (err) {
+    console.warn('Gagal membuat training job:', err);
+    return null;
+  }
+}
+
+export async function claimTrainingJob(api, jobId) {
+  if (!api || !jobId) return false;
+  try {
+    const res = await api.post('/data/training-jobs.php?claim=1', { id: jobId });
+    return res.data?.status === 'success';
+  } catch {
+    return false;
+  }
+}
+
+export async function updateTrainingJobHeartbeat(api, jobId, { phase, progress } = {}) {
+  if (!api || !jobId) return false;
+  try {
+    await api.put(`/data/training-jobs.php?id=${jobId}`, { phase, progress });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function finishTrainingJob(api, jobId, { status = 'done', decision = null, historyId = null, error = null } = {}) {
+  if (!api || !jobId) return false;
+  try {
+    await api.put(`/data/training-jobs.php?id=${jobId}`, {
+      status,
+      result_decision: decision,
+      result_history_id: historyId,
+      error_message: error,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchPendingTrainingJobs(api) {
+  if (!api) return [];
+  try {
+    const res = await api.get('/data/training-jobs.php?status=pending,running');
+    return res.data?.data ?? [];
+  } catch {
+    return [];
+  }
+}
