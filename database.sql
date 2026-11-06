@@ -90,6 +90,24 @@ CREATE TABLE IF NOT EXISTS training_jobs (
     FOREIGN KEY (result_history_id) REFERENCES prediction_history(id) ON DELETE SET NULL
 );
 
+-- 7. Tabel Kalender Libur Nasional (T-22)
+CREATE TABLE IF NOT EXISTS holidays (
+    id           INT AUTO_INCREMENT PRIMARY KEY,
+    holiday_date DATE NOT NULL,
+    type         ENUM('nasional','cuti_bersama') NOT NULL DEFAULT 'nasional',
+    description  VARCHAR(150) NOT NULL DEFAULT '',
+    UNIQUE KEY uk_holiday_date (holiday_date)
+);
+
+-- 8. Tabel Libur Sekolah — Rentang Tanggal (T-22)
+CREATE TABLE IF NOT EXISTS school_holidays (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    start_date  DATE NOT NULL,
+    end_date    DATE NOT NULL,
+    description VARCHAR(150) NOT NULL DEFAULT '',
+    CONSTRAINT chk_sh_dates CHECK (end_date >= start_date)
+);
+
 -- Indexes for performance
 CREATE INDEX idx_year_week ON ticket_sales(year, week);
 CREATE INDEX idx_week_start_date ON ticket_sales(week_start_date);

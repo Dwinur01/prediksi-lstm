@@ -115,7 +115,23 @@ function init_sqlite_db($conn) {
         FOREIGN KEY (history_id) REFERENCES prediction_history(id) ON DELETE CASCADE
     )");
 
-    // 5. Create training_jobs table
+    // 5. Create holidays table
+    $conn->exec("CREATE TABLE IF NOT EXISTS holidays (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        holiday_date TEXT NOT NULL UNIQUE,
+        type TEXT NOT NULL DEFAULT 'nasional',
+        description TEXT NOT NULL DEFAULT ''
+    )");
+
+    // 6. Create school_holidays table
+    $conn->exec("CREATE TABLE IF NOT EXISTS school_holidays (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT ''
+    )");
+
+    // 7. Create training_jobs table
     $conn->exec("CREATE TABLE IF NOT EXISTS training_jobs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         trigger_type TEXT NOT NULL,
