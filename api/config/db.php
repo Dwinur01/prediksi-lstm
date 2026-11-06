@@ -85,14 +85,26 @@ function init_sqlite_db($conn) {
     $conn->exec("CREATE TABLE prediction_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NULL,
+        model_mode TEXT DEFAULT 'latih',
         run_date DATETIME DEFAULT CURRENT_TIMESTAMP,
         epochs INTEGER,
         learning_rate REAL,
         window_size INTEGER,
+        config_json TEXT,
+        data_n INTEGER,
+        data_first_week TEXT,
+        data_last_week TEXT,
+        data_hash TEXT,
+        is_active INTEGER DEFAULT 0,
+        job_id INTEGER,
+        variant TEXT,
+        decision TEXT,
         mse REAL,
         rmse REAL,
         mape REAL,
-        results_json TEXT
+        mae REAL,
+        results_json TEXT,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
     )");
     
     // 4. Create lstm_weights table

@@ -30,14 +30,26 @@ CREATE TABLE IF NOT EXISTS ticket_sales (
 CREATE TABLE IF NOT EXISTS prediction_history (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NULL,
+    model_mode VARCHAR(20) DEFAULT 'latih',
     run_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     epochs INT,
     learning_rate FLOAT,
     window_size INT,
+    config_json JSON NULL,
+    data_n INT NULL,
+    data_first_week DATE NULL,
+    data_last_week DATE NULL,
+    data_hash CHAR(64) NULL,
+    is_active TINYINT(1) DEFAULT 0,
+    job_id INT NULL,
+    variant VARCHAR(12) NULL,
+    decision VARCHAR(20) NULL,
     mse FLOAT,
     rmse FLOAT,
     mape FLOAT,
-    results_json LONGTEXT
+    mae FLOAT NULL,
+    results_json LONGTEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
 -- 4. Tabel Bobot Model LSTM
