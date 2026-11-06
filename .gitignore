@@ -41,7 +41,9 @@ dist-ssr
 api/config/*.sqlite
 
 # Test & Debug scripts
-test_*.php
+/test_*.php
+!tests/
+scratch/
 
 # Datasets & Spreadsheet files
 *.xlsx
